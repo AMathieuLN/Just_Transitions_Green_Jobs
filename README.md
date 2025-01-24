@@ -29,6 +29,8 @@ Just_Transitions_Green_Jobs/
 ├── script/
 │   ├── TJ_EV_fr.qmd        # Main script in French
 │   ├── JT_GJ_en.qmd        # Main script in English
+│   ├── README_fr.qmd        # README script in French
+│   ├── README_en.qmd        # README script in English
 ├── outputs/
 │   ├── JTS_SP_IV.rds            # Merged data (JTS and IV)
 │   ├── JTS_SP_IV_GDPpc.rds      # Merged data with GDP per capita
