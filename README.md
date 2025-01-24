@@ -2,7 +2,7 @@
 
 ## Description
 
-This repository accompanies the publication "Thinking Just Transitions in the Global South: Quantification Challenges for Green Job Policies" by ***Alexandre Mathieu*** and ***Yanis Rihi***.
+This repository accompanies the publication "Thinking Just Transitions in the Global South: Quantification Challenges for Green Job Policies" ("Penser les transitions justes dans les Suds : enjeux de quantification pour les politiques d’emplois verts") by ***Alexandre Mathieu*** and ***Yanis Rihi***.
 
 ***Contacts :***
 
