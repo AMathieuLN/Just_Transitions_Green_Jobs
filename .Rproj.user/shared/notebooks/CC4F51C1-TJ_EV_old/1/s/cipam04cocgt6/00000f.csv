@@ -1,6 +1,0 @@
-"0","# Renomme les colonnes dans le jeu de données fusionné"
-"0","JTS_SP_IV <- JTS_SP_IV %>%"
-"0","  rename("
-"0","    country_JTS = country.x,"
-"0","    country_IV = country.y"
-"0","  )"

@@ -1,4 +1,0 @@
-"0","# Modèle linéaire simple"
-"0","linear_model <- lm(Mean_JTS ~ GDPpc_Mean, data = mean_JTS_by_iso3c)"
-"2","Error in eval(mf, parent.frame()) : object 'mean_JTS_by_iso3c' not found
-"

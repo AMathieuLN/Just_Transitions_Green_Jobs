@@ -1,7 +1,0 @@
-"0","# Identifie les lignes avec des valeurs manquantes"
-"0","missing_gdppc <- JTS_SP_IV_GDPpc %>%"
-"0","  filter(is.na(wdi_gdppc)) %>%"
-"0","  select(iso3c, year)"
-"0",""
-"0","# Affiche les pays et années manquants"
-"0","print(missing_gdppc)"

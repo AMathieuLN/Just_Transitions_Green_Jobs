@@ -1,3 +1,0 @@
-"0","# On renomme la colonne iso en iso3c"
-"0","JTS_SP <- JTS_SP %>%"
-"0","  rename(iso3c = iso)"

@@ -1,1 +1,0 @@
-{"frames":[{"func":"ggplot(mean_JTS_by_iso3c, aes(x = as.factor(income_group_num), \n    y = Mean_JTS, fill = as.factor(income_group_num)))","file":"","line_number":0,"end_line_number":0,"character_number":0,"end_character_number":0}],"message":"Error: object 'mean_JTS_by_iso3c' not found\n"}

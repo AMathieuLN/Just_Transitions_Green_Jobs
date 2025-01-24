@@ -1,4 +1,0 @@
-"0","# Modèle quadratique"
-"0","quadratic_model <- lm(Mean_JTS ~ GDPpc_Mean + I(GDPpc_Mean^2), data = mean_JTS_by_iso3c)"
-"2","Error in eval(mf, parent.frame()) : object 'mean_JTS_by_iso3c' not found
-"

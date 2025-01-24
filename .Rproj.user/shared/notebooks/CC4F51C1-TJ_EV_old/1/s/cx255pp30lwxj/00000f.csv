@@ -1,7 +1,0 @@
-"0","# Identifie les doublons dans ECO_clean"
-"0","ECO_duplicates <- ECO_clean %>%"
-"0","  group_by(iso3c, year) %>%"
-"0","  filter(n() > 1)"
-"0",""
-"0","# Affiche les doublons"
-"0","print(ECO_duplicates)"

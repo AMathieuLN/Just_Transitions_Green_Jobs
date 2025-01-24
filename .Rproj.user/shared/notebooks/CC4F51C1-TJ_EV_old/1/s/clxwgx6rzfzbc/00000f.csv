@@ -1,3 +1,0 @@
-"0","# Fusionne JTS_SP et IV sur les clés ""iso3c"" et ""country"""
-"0","JTS_SP_IV <- JTS_SP %>%"
-"0","  left_join(IV, by = ""iso3c"")"

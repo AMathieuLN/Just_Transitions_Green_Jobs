@@ -1,4 +1,0 @@
-"0","# Vérifie les données interpolées pour SYR et DJI"
-"0","JTS_SP_IV_GDPpc %>%"
-"0","  filter(iso3c %in% c(""SYR"", ""DJI"")) %>%"
-"0","  select(iso3c, year, wdi_gdppc)"

@@ -1,6 +1,0 @@
-"0","# Vérifie le total de valeurs manquantes dans le jeu de données"
-"0","sum(is.na(JTS_SP_IV))"
-"1","[1]"
-"1"," 0"
-"1","
-"

@@ -1,6 +1,0 @@
-"0","# Fusionne JTS_SP_IV avec les données GDP per capita de ECO_RDS"
-"0","JTS_SP_IV_GDPpc <- JTS_SP_IV %>%"
-"0","  left_join(ECO_clean, by = c(""iso3c"", ""year""))"
-"0",""
-"0","# Vérifie les premières lignes du dataframe fusionné"
-"0","head(JTS_SP_IV_GDPpc)"
