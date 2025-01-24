@@ -6,6 +6,8 @@ title: "TJ_EV_fr"
 
 ### Sources et données d'origine
 
+
+
 ### Package et library
 
 ```{r}
@@ -13,18 +15,7 @@ options(repos = c(CRAN = "https://cloud.r-project.org"))
 ```
 
 ```{r}
-install.packages("readxl")
-```
-
-```{r}
-install.packages("zoo")
-```
-
-```{r}
-library(dplyr)
-library(ggplot2)
-library(readxl)
-library(zoo)
+source("requirements.R")
 ```
 
 ```{r}

@@ -13,18 +13,7 @@ options(repos = c(CRAN = "https://cloud.r-project.org"))
 ```
 
 ```{r}
-install.packages("readxl")
-```
-
-```{r}
-install.packages("zoo")
-```
-
-```{r}
-library(dplyr)
-library(ggplot2)
-library(readxl)
-library(zoo)
+source("requirements.R")
 ```
 
 ```{r}
