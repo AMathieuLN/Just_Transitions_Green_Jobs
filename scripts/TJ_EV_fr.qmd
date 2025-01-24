@@ -327,7 +327,7 @@ scatter_plot <- ggplot(JTS_SP_IV_GDPpc, aes(x = wdi_gdppc, y = JTS, color = as.f
     )
   )
 # Afficher le graphique
-print(scatter_plot)
+print(scatter_plot_fr)
 ```
 
 ```{r}
@@ -396,6 +396,17 @@ boxplot_with_outliers <- ggplot(JTS_SP_IV_GDPpc, aes(x = as.factor(income_group_
   theme_minimal()
 # Afficher le graphique
 print(boxplot_with_outliers)
+```
+
+```{r}
+# Sauvegarde du graphique avec un fond blanc
+ggsave(
+  filename = "outputs/boxplot_with_outliers_fr.png", 
+  plot = scatter_plot,
+  width = 8,
+  height = 6,
+  bg = "white"
+)
 ```
 
 #### Tableau 2 "**Liste des pays aberrants en fonction du groupe de revenu et du nombre d’années avec *outliers***"
@@ -506,7 +517,7 @@ print(trend_plot)
 ```{r}
 # Sauvegarde du graphique
 ggsave(
-  filename = "outputs/trend_plot_with_unique_country_colors_fr.png",
+  filename = "outputs/trend_plot_fr.png",
   plot = trend_plot,
   width = 12,
   height = 8,
