@@ -1,0 +1,73 @@
+---
+title: "README_fr"
+format: gfm
+---
+
+# Code de réplication pour : "Penser les transitions justes dans les Suds : enjeux de quantification pour les politiques d’emplois verts"
+
+## Description
+
+Ce dépôt accompagne la publication **"Penser les transitions justes dans les Suds : enjeux de quantification pour les politiques d’emplois verts"** d'Alexandre Mathieu et Yanis Rihi.
+
+***Contacts :***
+
+Alexandre Mathieu :
+
+-   [alexandre.mathieu\@universite-paris-saclay.fr]{.underline}
+
+-   <https://amathieuln.github.io/CV_AM/>
+
+Yanis Rihi :
+
+-   [yanis.rihi\@universite-paris-saclay.fr]{.underline}
+
+-   <https://www.umi-source.uvsq.fr/m-yanis-rihi>
+
+## Structure du projet
+
+```{r}
+Just_Transitions_Green_Jobs/
+├── data/
+│   ├── JTS_SP.xlsx       # Données brutes des scores JTS
+│   ├── IV.rds            # Variables d'identification des pays
+│   ├── WDI_GDPPC.xlsx    # Données de PIB par habitant
+├── outputs/
+│   ├── JTS_SP_IV.rds            # Données fusionnées (JTS et IV)
+│   ├── JTS_SP_IV_GDPpc.rds      # Données fusionnées avec PIB/habitant
+│   ├── scatter_plot.png         # Graphique 1: Relation quadratique entre JTS et PIB/habitant
+│   ├── boxplot_with_outliers_fr.png  # Graphique 2: Boxplot des valeurs aberrantes
+│   ├── trend_plot_fr.png        # Graphique 3: Évolution du JTS par pays
+├── script/
+│   ├── TJ_EV_fr.R        # Script principal en français
+│   ├── JT_GJ_en.R        # Script principal en anglais
+├── requirements.R        # Liste des packages nécessaires pour le projet
+├── README.md             # Documentation détaillée
+└── JT_GJ.Rproj           # Fichier projet RStudio
+
+```
+
+## Prérequis
+
+Assurez-vous que les dernières versions de R et RStudio soient installés sur votre système.
+
+## Étapes pour la réplication
+
+1.  A partir de votre "Terminal" sur Rstudio, clonez le dépôt :
+
+-   Tapez d'abord : *git clone https://github.com/AMathieuLN/Just_Transitions_Green_Jobs.git*
+
+-   Puis : *cd Just_Transitions_Green_Jobs*
+
+2.  Ouvrez le fichier **`JT_GJ.Rproj`** dans RStudio.
+
+3.  Exécutez le script **`requirements.R`** pour installer les dépendances. Possible directement dans la console :
+
+```{r}
+source("requirements.R")
+```
+
+4.  Lancez les analyses en suivant les scripts, selon la langue au choix, dans le dossier "script/".
+
+5.  Les fichiers transformés et graphiques générés se trouvent dans le dossier "outputs/".
+
+6.  Chaque graphique est enregistré en format PNG, prêt à être utilisé dans des publications.

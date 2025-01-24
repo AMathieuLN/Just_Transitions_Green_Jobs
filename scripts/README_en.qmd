@@ -28,16 +28,19 @@ Yanis Rihi :
 ```{r}
 Just_Transitions_Green_Jobs/
 ├── data/
-│   ├── JTS_SP.xlsx       # Raw data for JTS scores
+│   ├── JTS_SP.xlsx       # Raw data of JTS scores
 │   ├── IV.rds            # Country identification variables
 │   ├── WDI_GDPPC.xlsx    # GDP per capita data
 ├── outputs/
 │   ├── JTS_SP_IV.rds            # Merged data (JTS and IV)
 │   ├── JTS_SP_IV_GDPpc.rds      # Merged data with GDP per capita
-│   ├── scatter_plot.png         # Graph 1: Quadratic relationship between JTS and GDP per capita
-│   ├── boxplot_with_outliers_fr.png  # Graph 2: Boxplot of outliers
-│   ├── trend_plot_fr.png        # Graph 3: JTS evolution by country
-├── requirements.R        # List of required packages for the project
+│   ├── scatter_plot.png         # Figure 1: Quadratic relationship between JTS and GDP per capita
+│   ├── boxplot_with_outliers_fr.png  # Figure 2: Boxplot of outliers
+│   ├── trend_plot_fr.png        # Figure 3: JTS evolution by country
+├── script/
+│   ├── TJ_EV_fr.R        # Main script in French
+│   ├── JT_GJ_en.R        # Main script in English
+├── requirements.R        # List of required R packages for the project
 ├── README.md             # Detailed documentation
 └── JT_GJ.Rproj           # RStudio project file
 ```
