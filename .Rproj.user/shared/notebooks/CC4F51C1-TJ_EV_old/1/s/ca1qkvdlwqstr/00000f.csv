@@ -1,0 +1,7 @@
+"0","# Identifie les pays avec GDP faible et JTS élevé"
+"0","outliers <- JTS_SP_IV_GDPpc %>%"
+"0","  filter(wdi_gdppc < 10000 & JTS > 70) %>%"
+"0","  select(iso3c, year, wdi_gdppc, JTS)"
+"0",""
+"0","# Afficher les valeurs aberrantes"
+"0","print(outliers)"

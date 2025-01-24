@@ -1,0 +1,515 @@
+---
+title: "JT_GJ_en"
+---
+
+## Data preparation
+
+### Data sources and origins
+
+### Package and library
+
+```{r}
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+```
+
+```{r}
+install.packages("readxl")
+```
+
+```{r}
+install.packages("zoo")
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(readxl)
+library(zoo)
+```
+
+```{r}
+# Importing the RDS file
+file_path1 <- "data/JTS_SP.xlsx"
+# Reading the RDS file
+JTS_SP <- read_excel(file_path1)
+# Importing the RDS file
+file_path2 <- "data/IV.rds"
+# Lecture du fichier RDS
+IV <- readRDS(file_path2)
+```
+
+### Correction des erreurs
+
+```{r}
+# Vérification de la structure des données
+str(JTS_SP)
+# Affichage des noms des colonnes
+colnames(JTS_SP)
+```
+
+```{r}
+# Renommage de la colonne avec des caractères parasites
+colnames(JTS_SP) <- colnames(JTS_SP) %>%
+  gsub("\r|\n", "", .) # Supprime les caractères \r et \n
+colnames(JTS_SP)[colnames(JTS_SP) == "yearyear"] <- "year"
+# Vérification des colonnes après correction
+colnames(JTS_SP)
+```
+
+```{r}
+# Conversion de la colonne "year" en numérique
+JTS_SP$year <- as.numeric(JTS_SP$year)
+# Vérification des types de colonnes
+str(JTS_SP)
+```
+
+```{r}
+# Renommage de la colonne "iso" en "iso3c"
+JTS_SP <- JTS_SP %>%
+  rename(iso3c = iso)
+```
+
+### Fusion avec "IV"
+
+```{r}
+# Fusionne JTS_SP et IV sur les clés "iso3c" et "country"
+JTS_SP_IV <- JTS_SP %>%
+  left_join(IV, by = "iso3c")
+```
+
+```{r}
+# Renomme les colonnes dans le jeu de données fusionné
+JTS_SP_IV <- JTS_SP_IV %>%
+  rename(
+    country_JTS = country.x,
+    country_IV = country.y
+  )
+```
+
+```{r}
+# Vérification du total de valeurs manquantes dans le jeu de données
+sum(is.na(JTS_SP_IV))
+```
+
+```{r}
+# Extraction des lignes contenant des valeurs manquantes
+missing_rows <- JTS_SP_IV[!complete.cases(JTS_SP_IV), ]
+
+# Affichage des premières lignes avec des valeurs manquantes
+head(missing_rows)
+```
+
+Le cas du Venezuela présente une singularité notable dans le cadre des classificaions de groupes de revenu. En effet, ce pays n'est pas inclus dans une catégorie "income_group" dans les données les plus récentes. Historiquement, les Nations Unies classaient le Venezuela dans le groupe des "revenus moyens supérieurs" (*Upper middle income*) pendant une longue période, comme en témoigne leur base de données officielle : <https://publicadministration.un.org/egovkb/en-us/Data/Country-Information/id/188-Venezuela>. Cependant, à partir de 2021, cette classification a été suspendue en raison de l'insuffisance de données actualisées. Étant donné que nos données s'étendent jusqu'à l'année 2022, nous avons choisi de rétablir cette ancienne classification pour maintenir une cohérence dans nos analyses.
+
+```{r}
+# Affichage des valeurs uniques de "income_group"
+unique(JTS_SP_IV$income_group)
+```
+
+```{r}
+# Vérification des niveaux actuels de "income_group"
+levels(JTS_SP_IV$income_group)
+```
+
+```{r}
+# Remplit NA avec "Upper middle income" pour le Venezuela
+JTS_SP_IV$income_group[JTS_SP_IV$iso3c == "VEN" & is.na(JTS_SP_IV$income_group)] <- "Upper middle income"
+# Vérifie que le remplissage a bien été effectué
+table(JTS_SP_IV$income_group)
+```
+
+```{r}
+# Reclassification des niveaux du facteur
+JTS_SP_IV$income_group <- factor(
+  JTS_SP_IV$income_group,
+  levels = c("High income", "Upper middle income", "Lower middle income", "Low income")
+)
+# Création d'une colonne numérique basée sur l'ordre des niveaux
+JTS_SP_IV$income_group_num <- as.numeric(JTS_SP_IV$income_group)
+# Vérification des nouvelles classifications
+table(JTS_SP_IV$income_group, JTS_SP_IV$income_group_num)
+```
+
+```{r}
+# Vérification du total de valeurs manquantes dans le jeu de données
+sum(is.na(JTS_SP_IV))
+```
+
+#### Téléchargement de "JTS_SP_IV"
+
+```{r}
+# Sauvegarde du fichier fusionné au format RDS, dans le dossier "data/"
+saveRDS(JTS_SP_IV, file = "data/JTS_SP_IV.rds", compress = "xz")
+```
+
+### Fusion avec données de PIB/habitants
+
+Les données utilisées dans cette étude ont été initialement téléchargées via le package R fourni par la Banque Mondiale, ce qui garantit leur authenticité et leur conformité aux standards internationaux. Dans le cadre de cette étude spécifique, le PIB/habitant (intitulé ici "wdi_gdppc"), nous avons extrait uniquement la variable pertinente de ce jeu de données consolidé, afin de répondre aux objectifs de recherche ciblés.
+
+```{r}
+# Chargement du fichier RDS
+file_path3 <- "data/WDI_GDPPC.xlsx"
+# Lecture du fichier RDS
+WDI_GDPPC <- read_excel(file_path3)
+```
+
+```{r}
+# Fusionne JTS_SP_IV avec WDI_GDPPC
+JTS_SP_IV_GDPpc <- JTS_SP_IV %>%
+  left_join(WDI_GDPPC, by = c("iso3c", "year"))
+# Vérification des premières lignes du dataframe fusionné
+head(JTS_SP_IV_GDPpc)
+```
+
+Le nombre d'observations augmente entre les variables "JTS_SP_IV" (1932) et "JTS_SP_IV_GDPpc" (1956). Cette augmentation pourrait s'expliquer par la présence de doublons ou par des correspondances multiples dans le dataframe WDI_GDPPC, qui contient les données relatives au PIB par habitant.
+
+```{r}
+# Identifie les doublons dans WDI_GDPPC
+WDI_GDPPC_duplicates <- WDI_GDPPC %>%
+  group_by(iso3c, year) %>%
+  filter(n() > 1)
+
+# Affiche les doublons
+print(WDI_GDPPC_duplicates)
+```
+
+Il y a des doublons pour ZAF (Afrique du Sud) et RUS (Russie).
+
+```{r}
+# Vérification des doublons spécifiques à ZAF et RUS
+WDI_GDPPC %>%
+  filter(iso3c %in% c("ZAF", "RUS")) %>%
+  group_by(iso3c, year) %>%
+  summarise(Count = n(), .groups = "drop") %>%
+  filter(Count > 1)
+```
+
+```{r}
+# Suppression des doublons dans WDI_GDPPC
+WDI_GDPPC <- WDI_GDPPC %>%
+  distinct(iso3c, year, .keep_all = TRUE)
+# Vérification de la suppression des doublons
+WDI_GDPPC %>%
+  filter(iso3c %in% c("ZAF", "RUS")) %>%
+  group_by(iso3c, year) %>%
+  summarise(Count = n(), .groups = "drop")
+```
+
+```{r}
+# Fusion corrigée
+JTS_SP_IV_GDPpc <- JTS_SP_IV %>%
+  left_join(WDI_GDPPC, by = c("iso3c", "year"))
+# Vérification du nombre final d'observations
+nrow(JTS_SP_IV_GDPpc)
+```
+
+#### Vérification de la fusion "JTS_SP_IV" et "WDI_GDPPC"
+
+```{r}
+# Vérification de doublons dans le dataframe final
+JTS_SP_IV_GDPpc %>%
+  group_by(iso3c, year) %>%
+  summarise(Count = n(), .groups = "drop") %>%
+  filter(Count > 1)
+```
+
+```{r}
+# Vérifie les NA dans wdi_gdppc
+sum(is.na(JTS_SP_IV_GDPpc$wdi_gdppc))
+```
+
+```{r}
+# Identification des lignes avec des valeurs manquantes
+missing_gdppc <- JTS_SP_IV_GDPpc %>%
+  filter(is.na(wdi_gdppc)) %>%
+  select(iso3c, year)
+
+# Affichage des pays et des années manquants
+print(missing_gdppc)
+```
+
+Observations : quatre pays avec des données manquantes problématiques :
+
+-   **SYR (Syrie)** : Une seule année est manquante (2022). Cette absence peut être comblée par une interpolation linéaire ou par le calcul de la moyenne des années les plus proches.
+
+-   **DJI (Djibouti)** : Deux années sont manquantes (2011 et 2012). Ces valeurs peuvent être estimées par interpolation linéaire.
+
+-   **ERI (Érythrée)** : Les données sont totalement absentes entre 2013 et 2022. Par conséquent, ce pays est exclu de l’analyse, et les valeurs correspondantes sont supprimées.
+
+-   **VEN (Venezuela)** : Aucune donnée n’est disponible pour aucune année. Ce pays est également supprimé de l’ensemble des données.
+
+```{r}
+# Suppression de ERI et VEN
+JTS_SP_IV_GDPpc <- JTS_SP_IV_GDPpc %>%
+  filter(!(iso3c %in% c("ERI", "VEN")))
+```
+
+```{r}
+# Vérification de la suppression des pays ERI et VEN
+JTS_SP_IV_GDPpc %>%
+  filter(iso3c %in% c("ERI", "VEN"))
+```
+
+```{r}
+# Extrapolation uniquement pour SYR et DJI
+JTS_SP_IV_GDPpc <- JTS_SP_IV_GDPpc %>%
+  group_by(iso3c) %>%
+  mutate(wdi_gdppc = ifelse(
+    iso3c %in% c("SYR", "DJI"),
+    na.approx(wdi_gdppc, rule = 2, na.rm = FALSE), # Extrapolation aux extrémités
+    wdi_gdppc
+  )) %>%
+  ungroup()
+```
+
+```{r}
+# Vérification des données interpolées pour SYR et DJI
+JTS_SP_IV_GDPpc %>%
+  filter(iso3c %in% c("SYR", "DJI")) %>%
+  select(iso3c, year, wdi_gdppc)
+```
+
+#### Téléchargement de "JTS_SP_IV_GDPpc"
+
+```{r}
+# Sauvegarde du fichier fusionné au format RDS, dans le dossier "output/"
+saveRDS(JTS_SP_IV_GDPpc, file = "outputs/JTS_SP_IV_GDPpc.rds", compress = "xz")
+```
+
+## Analyses d'après "JTS_SP_IV_GDPpc"
+
+### 1. Modèles linéaires et quadratiques
+
+Cette analyse examine la relation entre le Just Transition Score (JTS) et le PIB par habitant en utilisant des modèles linéaires et quadratiques. L’approche quadratique permet de capturer des relations non linéaires potentielles, souvent présentes dans des contextes socio-économiques complexes. La Figure 1 illustre visuellement cette relation en superposant une courbe quadratique à un nuage de points distinguant les groupes de revenus, offrant ainsi une compréhension plus nuancée des dynamiques entre ces variables.
+
+#### Tableau 1 "Relations linéaires et quadratiques entre JTS et PIB/habitant"
+
+```{r}
+# Modèle linéaire simple
+model_linear <- lm(JTS ~ wdi_gdppc, data = JTS_SP_IV_GDPpc)
+# Résumé du modèle linéaire
+summary(model_linear)
+```
+
+```{r}
+# Modèle quadratique
+model_quad <- lm(JTS ~ wdi_gdppc + I(wdi_gdppc^2), data = JTS_SP_IV_GDPpc)
+# Résumé du modèle quadratique
+summary(model_quad)
+```
+
+#### Figure 1 "Nuage de points avec courbe quadratique"
+
+```{r}
+# Nuage de points avec courbe quadratique et distinction des groupes de revenus
+scatter_plot <- ggplot(JTS_SP_IV_GDPpc, aes(x = wdi_gdppc, y = JTS, color = as.factor(income_group_num))) +
+  geom_point(alpha = 0.6) +  # Points colorés par groupe de revenu
+  stat_smooth(method = "lm", formula = y ~ poly(x, 2), color = "red") +  # Courbe quadratique globale
+  labs(
+    title = "",
+    x = "PIB par habitant (dollars constants 2015)",
+    y = "Just Transition Score (JTS)",
+    color = "Groupe de revenu"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    legend.position = "right"
+  ) +
+  scale_color_manual(
+    values = c("1" = "red", "2" = "green", "3" = "blue", "4" = "purple"),
+    labels = c(
+      "1" = "Revenu élevé",
+      "2" = "Revenu intermédiaire supérieur",
+      "3" = "Revenu intermédiaire inférieur",
+      "4" = "Faible revenu"
+    )
+  )
+# Afficher le graphique
+print(scatter_plot)
+```
+
+```{r}
+# Sauvegarde du graphique avec un fond blanc
+ggsave(
+  filename = "outputs/scatter_plot.png", 
+  plot = scatter_plot,
+  width = 8,
+  height = 6,
+  bg = "white"
+)
+```
+
+### 2. Valeurs aberrantes
+
+Pour identifier les valeurs aberrantes, nous adoptons l'approche de l'intervalle interquartile (*Interquartile Range*, IQR). Une observation est considérée comme aberrante si son score **JTS** satisfait l'une des conditions suivantes :
+
+-   **Inférieure** à Q1​−1.5×IQR
+
+-   **Supérieure** à Q3​+1.5×IQR
+
+Où Q1​ et Q3 représentent respectivement le premier et le troisième quartile de la distribution des scores JTS, et l’IQR est défini comme Q3−Q1.
+
+```{r}
+# Identification des valeurs aberrantes par groupe de revenu
+outliers <- JTS_SP_IV_GDPpc %>%
+  group_by(income_group_num) %>%
+  summarise(
+    Q1 = quantile(JTS, 0.25, na.rm = TRUE),
+    Q3 = quantile(JTS, 0.75, na.rm = TRUE),
+    IQR = Q3 - Q1,
+    Lower_Bound = Q1 - 1.5 * IQR,
+    Upper_Bound = Q3 + 1.5 * IQR
+  ) %>%
+  right_join(JTS_SP_IV_GDPpc, by = "income_group_num") %>%
+  filter(JTS < Lower_Bound | JTS > Upper_Bound) %>%
+  select(iso3c, year, income_group_num, JTS, Lower_Bound, Upper_Bound)
+# Pays avec des valeurs aberrantes
+print(outliers)
+```
+
+#### Figure 2 Valeurs aberrantes des scores JTS par groupe de revenu
+
+```{r}
+# Graine aléatoire pour la reproductibilité
+set.seed(123)
+# Boxplot avec valeurs aberrantes annotées
+boxplot_with_outliers <- ggplot(JTS_SP_IV_GDPpc, aes(x = as.factor(income_group_num), y = JTS, fill = as.factor(income_group_num))) +
+  geom_boxplot(outlier.shape = NA) +  
+  geom_jitter(data = outliers, aes(label = iso3c), color = "red", size = 2) + 
+  labs(
+    title = "",
+    x = "Groupe de revenu",
+    y = "Just Transition Score (JTS)",
+    fill = "Groupe de revenu"
+  ) +
+  scale_fill_manual(
+    values = c("1" = "red", "2" = "green", "3" = "blue", "4" = "purple"),
+    labels = c(
+      "1" = "Revenu élevé",
+      "2" = "Revenu intermédiaire supérieur",
+      "3" = "Revenu intermédiaire inférieur",
+      "4" = "Faible revenu"
+    )
+  ) +
+  theme_minimal()
+# Afficher le graphique
+print(boxplot_with_outliers)
+```
+
+#### Tableau 2 "**Liste des pays aberrants en fonction du groupe de revenu et du nombre d’années avec *outliers***"
+
+```{r}
+# Liste unique des pays aberrants (iso3c, nom du pays et income_group)
+outliers_unique <- outliers %>%
+  group_by(iso3c) %>%
+  summarise(
+    country = first(iso3c),       
+    income_group = first(income_group_num), 
+    num_outlier_years = n()       
+  ) %>%
+  ungroup()
+# Résumé des pays aberrants
+print(outliers_unique)
+```
+
+#### Figure 3 "Évolution des scores JTS avec points d'inflexion par pays"
+
+```{r}
+# Sélection d'outliers pertinents au vu des résultats
+selected_outliers <- JTS_SP_IV_GDPpc %>%
+  filter(iso3c %in% c("BHR", "OMN", "MRT", "AFG", "CHN"))
+```
+
+```{r}
+# Ajout des variations annuelles et identification des inflexions
+evolution_data <- selected_outliers %>%
+  arrange(iso3c, year) %>%
+  group_by(iso3c) %>%
+  mutate(
+    year = as.integer(year),  
+    annual_change = JTS - lag(JTS),  
+    significant_change = ifelse(abs(annual_change) > 5, "Inflexion", "Stable"),  # Seuil de variation significative
+    income_group_label = case_when(  
+      income_group_num == 1 ~ "Revenu élevé",
+      income_group_num == 2 ~ "Revenu intermédiaire supérieur",
+      income_group_num == 3 ~ "Revenu intermédiaire inférieur",
+      income_group_num == 4 ~ "Faible revenu"
+    ),
+    country_label = paste0(iso3c, " (", income_group_label, ")")  
+  ) %>%
+  filter(!is.na(significant_change))  
+```
+
+```{r}
+# Création d'un dataframe avec les seuils des valeurs aberrantes corrigés
+outlier_thresholds <- data.frame(
+  income_group_label = c("Faible revenu", "Revenu intermédiaire inférieur", "Revenu intermédiaire supérieur", "Revenu élevé"),
+  Lower_Bound = c(30.31, 43.88, 49.15, 40.31),  
+  color = c("purple", "blue", "green", "red")
+)
+# Couleur unique pour chaque pays
+unique_countries <- unique(evolution_data$country_label)
+country_colors <- setNames(
+  grDevices::rainbow(length(unique_countries)),  
+  unique_countries
+)
+# Combiner les couleurs des seuils et des pays
+threshold_colors <- setNames(outlier_thresholds$color, outlier_thresholds$income_group_label)
+combined_colors <- c(threshold_colors, country_colors)
+
+# Création d'un graphique avec les seuils de valeurs aberrantes et des couleurs uniques
+trend_plot <- ggplot(evolution_data, aes(x = year, y = JTS, group = iso3c, color = country_label)) +
+  geom_line(size = 1) +  
+  geom_point(aes(size = abs(annual_change), shape = significant_change), alpha = 0.7) +  
+  scale_size_continuous(range = c(2, 6)) +  
+  scale_shape_manual(
+    values = c("Inflexion" = 17, "Stable" = 16),  # Triangle pour inflexion, cercle pour stable
+    name = "Type de changement"
+  ) +
+  geom_hline(
+    data = outlier_thresholds,
+    aes(yintercept = Lower_Bound, color = income_group_label),  
+    linetype = "dashed",
+    size = 0.8,
+    inherit.aes = FALSE  
+  ) +
+  scale_x_continuous(
+    breaks = seq(2011, 2022, by = 1),  
+    labels = seq(2011, 2022, by = 1)   
+  ) +
+  scale_color_manual(
+    values = combined_colors,  
+    breaks = c(names(threshold_colors), names(country_colors)),  
+    labels = c(names(threshold_colors), names(country_colors))   
+  ) +
+  labs(
+    title = "",
+    x = "Année",
+    y = "Just Transition Score (JTS)",
+    color = "Pays (Groupe de revenu)\nSeuils (Couleurs par revenu)",
+    size = "Amplitude du changement",
+    shape = "Type de changement"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    legend.text = element_text(size = 10),
+    panel.grid = element_line(color = "grey90"),
+    plot.title = element_text(size = 14, face = "bold")
+  )
+# Afficher le graphique
+print(trend_plot)
+```
+
+```{r}
+# Sauvegarde du graphique
+ggsave(
+  filename = "outputs/trend_plot_with_unique_country_colors_fr.png",
+  plot = trend_plot,
+  width = 12,
+  height = 8,
+  bg = "white"
+)
+```

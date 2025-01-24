@@ -1,0 +1,1509 @@
+---
+title: "EV_TJ"
+format: pdf
+editor: visual
+---
+
+# Préparation
+
+## Package et library
+
+```{r}
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+
+# Charger les packages nécessaires
+library(dplyr)
+library(ggplot2)
+install.packages("readxl")
+library(readxl)
+```
+
+```{r}
+# Charger le fichier .rds
+file_path <- "/Users/alexm/Documents/Recherches_scientifiques/These/Chap2/Data/GJ_data/just_transition/JTS_SP_v2.xlsx"
+
+# Lire le fichier RDS
+JTS_SP <- read_excel(file_path)
+
+
+# Charger le fichier .rds
+file_path <- "/Users/alexm/Documents/Recherches_scientifiques/These/Chap2/Data/GJ_data/thematic_fusions/IV.rds"
+
+# Lire le fichier RDS
+IV <- readRDS(file_path)
+```
+
+## Correction des erreurs
+
+```{r}
+# On vérifie la structure des données
+str(JTS_SP)
+
+# On affiche les noms des colonnes
+colnames(JTS_SP)
+
+
+```
+
+```{r}
+# On renomme la colonne avec des caractères parasites
+colnames(JTS_SP) <- colnames(JTS_SP) %>%
+  gsub("\r|\n", "", .) # Supprimer les caractères \r et \n
+colnames(JTS_SP)[colnames(JTS_SP) == "yearyear"] <- "year"
+
+# On vérifie les colonnes après correction
+colnames(JTS_SP)
+
+```
+
+```{r}
+# On converti la colonne year en numérique
+JTS_SP$year <- as.numeric(JTS_SP$year)
+
+# On vérifie les types des colonnes
+str(JTS_SP)
+
+```
+
+```{r}
+# On renomme la colonne iso en iso3c
+JTS_SP <- JTS_SP %>%
+  rename(iso3c = iso)
+```
+
+## Fusion avec IV
+
+```{r}
+# Fusionne JTS_SP et IV sur les clés "iso3c" et "country"
+JTS_SP_IV <- JTS_SP %>%
+  left_join(IV, by = "iso3c")
+```
+
+```{r}
+# Renomme les colonnes dans le jeu de données fusionné
+JTS_SP_IV <- JTS_SP_IV %>%
+  rename(
+    country_JTS = country.x,
+    country_IV = country.y
+  )
+```
+
+```{r}
+# Vérifie le total de valeurs manquantes dans le jeu de données
+sum(is.na(JTS_SP_IV))
+
+```
+
+```{r}
+# On va extraire ici les lignes contenant des valeurs manquantes
+missing_rows <- JTS_SP_IV[!complete.cases(JTS_SP_IV), ]
+
+# affiche les premières lignes avec des valeurs manquantes
+head(missing_rows)
+
+```
+
+On observe que c'est le Venezuela qui n'a pas de classification "income_group". Les Nations Unies classifiaient de "Upper middle income" pendant longtemps (<https://publicadministration.un.org/egovkb/en-us/Data/Country-Information/id/188-Venezuela>), jusqu'en 2021 où ils ne le classifient plus du fait de manque de données (<https://publicadministration.un.org/egovkb/en-us/Data/Country-Information/id/188-Venezuela>). Puisque nos données vont jusqu'en 2022, nous reprenons cette ancienne classification.
+
+```{r}
+# Affiche les valeurs uniques de income_group
+unique(JTS_SP_IV$income_group)
+```
+
+```{r}
+# Vérifie les niveaux actuels de income_group
+levels(JTS_SP_IV$income_group)
+```
+
+```{r}
+# Remplit NA avec "Upper middle income" pour le Venezuela
+JTS_SP_IV$income_group[JTS_SP_IV$iso3c == "VEN" & is.na(JTS_SP_IV$income_group)] <- "Upper middle income"
+
+# Vérifie que le remplissage a été effectué
+table(JTS_SP_IV$income_group)
+
+```
+
+```{r}
+# Reclasser les niveaux du facteur dans l'ordre souhaité
+JTS_SP_IV$income_group <- factor(
+  JTS_SP_IV$income_group,
+  levels = c("High income", "Upper middle income", "Lower middle income", "Low income")
+)
+
+# Je crée une colonne numérique basée sur l'ordre des niveaux
+JTS_SP_IV$income_group_num <- as.numeric(JTS_SP_IV$income_group)
+
+# Vérifie les nouvelles classifications
+table(JTS_SP_IV$income_group, JTS_SP_IV$income_group_num)
+
+```
+
+```{r}
+# Vérifie le total de valeurs manquantes dans le jeu de données
+sum(is.na(JTS_SP_IV))
+```
+
+### Téléchargement
+
+```{r}
+# Sauvegarde du fichier fusionné au format RDS
+saveRDS(JTS_SP_IV, file = "/Users/alexm/Documents/Recherches_scientifiques/These/Papiers/Papiers/chap_JUMI2023/JTS_SP_IV.rds", compress = "xz")
+```
+
+# Analyses
+
+## Statistiques descriptives
+
+```{r}
+# Moyennes annuelles de JTS par income_groupe_num
+annual_summary <- JTS_SP_IV %>%
+  group_by(income_group_num, year) %>%
+  summarise(
+    Average_JTS = mean(JTS, na.rm = TRUE),
+    SD_JTS = sd(JTS, na.rm = TRUE),
+    Count = n(),
+    .groups = "drop"
+  )
+
+# Vérifie les résultats
+head(annual_summary)
+
+```
+
+```{r}
+library(ggplot2)
+
+# Graphique des tendances temporelles
+ggplot(annual_summary, aes(x = year, y = Average_JTS, color = as.factor(income_group_num), group = income_group_num)) +
+  geom_line(size = 1.2) +
+  geom_point() +
+  labs(
+    title = "Évolution temporelle de JTS par groupe de revenu",
+    x = "Année",
+    y = "Moyenne de la Transition Juste (JTS)",
+    color = "Income Group (num)"
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+# Régression linéaire pour voir si l'évolution temporelle est significative pour chaque groupe
+trend_analysis <- JTS_SP_IV %>%
+  group_by(income_group_num) %>%
+  summarise(
+    Trend_Model = list(lm(JTS ~ year, data = cur_data())),
+    .groups = "drop"
+  )
+
+# Résumé des résultats des régressions
+trend_results <- lapply(trend_analysis$Trend_Model, summary)
+
+# Afficher les résultats
+for (group in seq_along(trend_results)) {
+  cat("\nRésultats pour income_groupe_num =", unique(trend_analysis$income_group_num)[group], ":\n")
+  print(trend_results[[group]])
+}
+
+```
+
+1- Significativité des tendances : Pour tous les groupes (`income_groupe_num = 1, 2, 3, 4`), la **p-value associée à `year`** est significative (p\<0.01), ce qui indique que l'évolution de **JTS** dans le temps est **statistiquement significative** pour chaque groupe de revenu.
+
+2- Magnitude des coefficients :
+
+-   **Groupe 1 (High income)** : Coefficient=0.606
+
+    -   Une augmentation moyenne de **0.606** points de JTS par an pour ce groupe.
+
+-   **Groupe 2 (Upper middle income)** : Coefficient=0.403
+
+    -   Une augmentation moyenne plus faible que le groupe 1.
+
+-   **Groupe 3 (Lower middle income)** : Coefficient=0.607
+
+    -   Similaire au groupe 1, mais avec une base de départ plus faible.
+
+-   **Groupe 4 (Low income)** : Coefficient=0.949
+
+    -   Une augmentation moyenne plus rapide que tous les autres groupes, ce qui suggère une **dynamique de rattrapage**.
+
+3- Ajustement des modèles (R2) : **R² globalement faible** (R² ajusté\<0.05 pour tous les groupes). Cela signifie que la **variabilité annuelle** explique une faible proportion de la variabilité totale de **JTS**. Les modèles capturent des tendances globales, mais d'autres facteurs (politiques, économiques, régionaux) influencent probablement davantage les valeurs de JTS.
+
+4- Les résidus : Les **résidus standards élevés** (par exemple, Residual Standard Error≈16 pour High income) indiquent une variabilité importante non expliquée par l'année seule.
+
+Interprétation plus générale :
+
+Les pays à **faible revenu (Low income)** montrent une progression temporelle plus rapide (Coefficient=0.949), indiquant peut-être une volonté ou une opportunité de rattraper leur retard. Les pays à **haut revenu (High income)** progressent également (Coefficient=0.606), mais à un rythme plus modéré. Les pays riches progressent plus lentement, ce qui peut être dû à un **effet de saturation** (ils ont déjà adopté des politiques majeures). Les pays à faible revenu peuvent bénéficier de mécanismes internationaux comme les **fonds climatiques**, les **subventions technologiques**, ou les **programmes de renforcement des capacités**. Cela validerait l’efficacité potentielle de telles politiques. Une analyse spécifique des politiques stagnantes (ou absentes) dans ces pays pourrait mettre en lumière des **leviers** pour accélérer leur transition.
+
+Les pays émergents peuvent être piégés par leur dépendance économique à des industries extractives ou polluantes (ex. : charbon, pétrole). Les **politiques de transition verte** doivent se concentrer sur la diversification économique et sur des incitations à adopter des industries durables. Ces groupes pourraient bénéficier de programmes de transfert de technologies vertes (énergie solaire, capture de carbone) pour accélérer leur transition.
+
+Les faibles R2 indiquent que d’autres facteurs que l’année influencent fortement la transition juste. Une analyse qualitative ou quantitative complémentaire est nécessaire pour explorer ces facteurs.
+
+Il y a donc des inégalités persistentes, mais des dynamiques de convergence : les pays à faible revenu rattrapent leur retard grâce à des soutiens internationaux, les payx riches doivent jouer leur rôle de locomotive sans ralentir. Les pays émergents nécessitent une attention particulière pour surmonter les **pièges de dépendance aux ressources**. Les politiques doivent s’adapter aux besoins spécifiques de chaque groupe pour maximiser les résultats.
+
+# La construction de JTS
+
+L'indicateur **Just Transition Score (JTS)** est construit comme une mesure composite visant à évaluer la durabilité relative des progrès sociaux des pays. Son objectif est de mesurer la capacité des pays à atteindre des résultats sociaux positifs tout en minimisant les impacts environnementaux. Le JTS s'appuie sur l'intensité environnementale des progrès sociaux, exprimée comme un ratio entre les impacts environnementaux et les progrès sociaux.
+
+Le JTS est constitué de deux sous-indices principaux :
+
+\(1\) **Carbon Just Transition Score (JTSCO2)** : Reflète le ratio entre l'empreinte carbone par habitant et le progrès social.
+
+\(2\) **Material Just Transition Score (JTSMF)** : Reflète le ratio entre l'empreinte matérielle par habitant et le progrès social.
+
+Ces sous-indices sont combinés pour obtenir le score global du JTS en prenant leur moyenne arithmétique.
+
+Les **progrès sociaux** sont mesurés à l'aide de Social Progress Index **(SPI)**, qui regroupe 60 indicateurs sociaux couvrant 12 dimensions clés comme l'accès à l'eau potable, la liberté, la santé et la sécurité. Les impacts environnementaux sont quant à eux évalués avec l'empreinte carbone (données du Global Carbon project), l'empreinte matérielle (données de l'OCDE) qui reflète la consommation totale de matériaux par habitant.
+
+Les ratios sont ajustés pour égaliser les coefficients de variation des numérateurs (CO2 ou empreinte matérielle) et des dénominateurs (SPI). Chaque ratio est inversé et normalisé sur une échelle de 0 à 100, où 100 représente la meilleure performance (progrès social élevé et impact environnemental faible). Le score global du JTS est la moyenne de ces deux scores partiels.
+
+Un **score élevé** indique un équilibre entre progrès social élevé et faible impact environnemental relatif. Un **score faible** reflète soit une insuffisance de progrès social, soit des impacts environnementaux disproportionnés.
+
+Mais cet indicateur ne prend pas en comtpe explicitement le développement économique (mesuré par des indicateurs comme le PIB ou le revenu par habitant) dans sa construction. Le **JTS** utilise l'Index de Progrès Social (SPI) pour mesurer les progrès sociaux, lequel est **entièrement indépendant de critères économiques** tels que le revenu ou le PIB. L'objectif est de se concentrer sur des indicateurs de bien-être social (accès à l'eau potable, éducation, santé, droits humains, etc.) et sur les impacts environnementaux, sans que les performances économiques biaisent les résultats. En éliminant l'économie comme variable explicite, le JTS met en lumière la capacité des pays à atteindre un développement social durable sans nécessairement dépendre d'une croissance économique élevée.
+
+Bien que le développement économique ne soit pas inclus directement, il existe une **relation non linéaire** entre le PIB par habitant et le JTS : Les scores JTS les plus élevés sont souvent observés dans des pays avec un **PIB modéré**, où le bien-être social est élevé et les impacts environnementaux sont relativement limités. Les pays les plus riches et les plus pauvres tendent à avoir des scores JTS plus faibles, mais pour des raisons opposées : Les plus riches ont des impacts environnementaux élevés, les plus pauvres ont des progrès sociaux insuffisants.
+
+# Politiques et emplois verts ?
+
+On repart de l'indicateur JTS auquel on ajoute une dimension économique simple de GDP per capita. L'ambition serait de pouvoir mieux cibler quelles types de politiques cibler selon catégories de pays. De plus, on pourrait créer une typologie des pays : regrouper les pays en "leaders", "rattrapeurs", et en "retard" selon leur JTS et GDP per capita pour cibler les politiques. Par exemple Les pays avec un haut JTS et un GDP intermédiaire montrent que des politiques sociales fortes peuvent soutenir les emplois verts sans trop augmenter les impacts environnementaux. Ou encore, Les pays à faible JTS et bas GDP per capita nécessitent un soutien pour stimuler des secteurs économiques verts.
+
+## Préparation GDP per capita
+
+```{r}
+# Charger le fichier .rds
+file_path <- "/Users/alexm/Documents/Recherches_scientifiques/These/Chap2/Data/GJ_data/thematic_fusions/ECO.RDS"
+
+# Lire le fichier RDS
+ECO_RDS <- readRDS(file_path)
+```
+
+```{r}
+# On extrait les colonnes nécessaires de ECO_RDS
+ECO_clean <- ECO_RDS %>%
+  select(iso3c, year, wdi_gdppc)
+
+# Vérifie les premières lignes
+head(ECO_clean)
+
+```
+
+```{r}
+# Fusionne JTS_SP_IV avec les données GDP per capita de ECO_RDS
+JTS_SP_IV_GDPpc <- JTS_SP_IV %>%
+  left_join(ECO_clean, by = c("iso3c", "year"))
+
+# Vérifie les premières lignes du dataframe fusionné
+head(JTS_SP_IV_GDPpc)
+
+```
+
+On a une augmentation du nombre d'observations entre "JTS_SP_IV" (1932) et "JTS_SP_IV_GDPpc" (1956). Cela peut être du à des doublons ou des correspondances multiples dans ECO_clean (le dataframe contenant les données GDP per capita).
+
+```{r}
+# Identifie les doublons dans ECO_clean
+ECO_duplicates <- ECO_clean %>%
+  group_by(iso3c, year) %>%
+  filter(n() > 1)
+
+# Affiche les doublons
+print(ECO_duplicates)
+
+```
+
+Il y a bel et bien des doublons pour ZAF (Afrique du Sud) et RUS (Russie).
+
+```{r}
+# Vérifie les doublons spécifiques à ZAF et RUS
+ECO_clean %>%
+  filter(iso3c %in% c("ZAF", "RUS")) %>%
+  group_by(iso3c, year) %>%
+  summarise(Count = n(), .groups = "drop") %>%
+  filter(Count > 1)
+
+```
+
+```{r}
+# Supprime les doublons dans ECO_clean
+ECO_clean <- ECO_clean %>%
+  distinct(iso3c, year, .keep_all = TRUE)
+
+# Vérifie que les doublons ont été supprimés
+ECO_clean %>%
+  filter(iso3c %in% c("ZAF", "RUS")) %>%
+  group_by(iso3c, year) %>%
+  summarise(Count = n(), .groups = "drop")
+
+```
+
+```{r}
+# Fusion corrigée
+JTS_SP_IV_GDPpc <- JTS_SP_IV %>%
+  left_join(ECO_clean, by = c("iso3c", "year"))
+
+# Vérifie le nombre final d'observations
+nrow(JTS_SP_IV_GDPpc)
+
+```
+
+### Vérifications fusion
+
+```{r}
+# Vérifie qu'il n'y a pas de doublons dans le dataframe final
+JTS_SP_IV_GDPpc %>%
+  group_by(iso3c, year) %>%
+  summarise(Count = n(), .groups = "drop") %>%
+  filter(Count > 1)
+
+```
+
+```{r}
+# Vérifie les NA dans wdi_gdpc
+sum(is.na(JTS_SP_IV_GDPpc$wdi_gdppc))
+
+```
+
+```{r}
+# Identifie les lignes avec des valeurs manquantes
+missing_gdppc <- JTS_SP_IV_GDPpc %>%
+  filter(is.na(wdi_gdppc)) %>%
+  select(iso3c, year)
+
+# Affiche les pays et années manquants
+print(missing_gdppc)
+
+```
+
+1- SYR (Syrie) : une seule année manquante (2022). Peut être comblée par interpolation linéaire ou par la moyenne des années proches.
+
+2- DJI (Djibouti) : deux années manquantes (2011 et 2012). Peut être interpolée.
+
+3- ERI (Erythrée) : Absence complète entre 2013 et 2022. Nous laissons manquant et ne tiendrons pas en compte. Nous supprimons.\
+4- VEN (Venezuela) : absence totale pour toutes les années. Nous supprimons.
+
+```{r}
+# Supprimer ERI et VEN
+JTS_SP_IV_GDPpc <- JTS_SP_IV_GDPpc %>%
+  filter(!(iso3c %in% c("ERI", "VEN")))
+
+```
+
+```{r}
+# Vérifier que les pays ERI et VEN ont été supprimés
+JTS_SP_IV_GDPpc %>%
+  filter(iso3c %in% c("ERI", "VEN"))
+
+```
+
+```{r}
+# Installer le package zoo (si non installé)
+if (!require(zoo)) install.packages("zoo")
+
+# Charger le package zoo
+library(zoo)
+
+# Extrapolation uniquement pour SYR et DJI
+JTS_SP_IV_GDPpc <- JTS_SP_IV_GDPpc %>%
+  group_by(iso3c) %>%
+  mutate(wdi_gdppc = ifelse(
+    iso3c %in% c("SYR", "DJI"),
+    na.approx(wdi_gdppc, rule = 2, na.rm = FALSE), # Extrapolation aux extrémités
+    wdi_gdppc
+  )) %>%
+  ungroup()
+
+```
+
+```{r}
+# Vérifie les données interpolées pour SYR et DJI
+JTS_SP_IV_GDPpc %>%
+  filter(iso3c %in% c("SYR", "DJI")) %>%
+  select(iso3c, year, wdi_gdppc)
+
+```
+
+## Analyse descriptive JTS et GDPpc
+
+Nous explorons comment le JTS varie en fonction du GDPpc (relation globale et par groupe de revenus).
+
+***Relation globale entre JTS et GDP per capita : Utilisez un scatter plot pour observer si une relation existe entre le développement économique et la capacité des pays à équilibrer progrès sociaux et impacts environnementaux.***
+
+```{r}
+library(ggplot2)
+
+# Scatter plot global avec lissage non linéaire
+ggplot(JTS_SP_IV_GDPpc, aes(x = wdi_gdppc, y = JTS)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "loess", color = "blue", se = TRUE) +
+  labs(
+    title = "Relation entre GDP per capita et Just Transition Score (JTS)",
+    x = "GDP per capita (USD)",
+    y = "Just Transition Score (JTS)"
+  ) +
+  theme_minimal()
+
+```
+
+La relation entre JTS et GDPpc semble quasiment plate, avec une légère tendance décroissante pour les hauts niveaux de GDP per capita. Cela pourrait suggérer une relation faible ou inexistante entre ces deux variables.
+
+1- **Zone basse du GDP per capita (0-10000 USD)** : Forte concentration de points, avec une grande dispersion des scores JTS (de 0 à 75). Cela indique que les pays à faible GDP per capita ont des scores très hétérogènes.
+
+2- **Zone modérée (10000-30000 USD):** Une concentration légèrement plus homogène autour de JTS ≈ 50-75. Ces pays semblent mieux équilibrer progrès sociaux et impacts environnementaux.
+
+3- **Zone haute (\>30000 USD) :** Une légère diminution du JTS avec des GDP per capita plus élevés. Cela reflète potentiellement une pénalisation liée aux impacts environnementaux élevés des pays riches.
+
+On vérifie si la relation est significative dans un modèle linéaire simple :
+
+```{r}
+# Modèle linéaire simple
+model_linear <- lm(JTS ~ wdi_gdppc, data = JTS_SP_IV_GDPpc)
+
+# Résumé du modèle linéaire
+summary(model_linear)
+
+```
+
+Le coefficient pour wdi_gdppc : β1​=−3.892×10−5, **p-value = 0.0189**.
+
+La relation linéaire est statistiquement significative (p\<0.05). Le coefficient négatif (β1\<0) indique une légère relation décroissante: un GDP per capita plus élevé est associé à une diminution très faible du JTS. Mais bien que statistiquement significative, la relation linéaire est très faible (Multiple R2=0.0029). Le GDPpc n'explique qu'une petite partie de la variance du JTS.
+
+```{r}
+# Modèle quadratique
+model_quad <- lm(JTS ~ wdi_gdppc + I(wdi_gdppc^2), data = JTS_SP_IV_GDPpc)
+
+# Résumé du modèle quadratique
+summary(model_quad)
+
+```
+
+Le terme linéaire (β1​) : 9.192×10\^{-5}, **p-value = 0.032**.
+
+Le terme quadratique (β2​) : −1.899×10−9, **p-value = 0.00098** (hautement significatif).
+
+Le modèle quadratique est statistiquement significatif (p\<0.001). Le terme quadratique (β2​\<0) confirme une relation en U inversé entre le GDPpc et le JTS. Cela suggère que les pays à GDP modéré maximisent leur JTS, tandis que les pays très riches ou très pauvres sont désavantagés.
+
+Le R\^2=0.0086 (modèle quadratique) est légèrement supérieur au R\^2=0.0029 (modèle linéaire), confirmant que le modèle quadratique est plus adapté pour expliquer cette relation.
+
+Une légère tendance en U inversé ? Le coefficient quadratique (β2​=−1.899×10\^−9) montre que la courbe est très aplatie non maquée. Les pays à GDP modéré obtiennent des scores JTS élevés moins dispersés, légèrement plus stables autour de scores moyens mais pas nécessairement au sommet. Les pays très riches subissent une légère tendance à des scores JTS inférieurs, liée à des impacts environnementaux disproportionnés. Les pays à faible GDP beaucoup obtiennent des scores élevés de JTS mais ce n'est pas dû au GDP lui-même. Cela peut s'expliquer par leur faible empreinte carbone et matérielle. La relation, bien que statistiquement significative, reste raible (faible R\^2). Cela indique que d'autres facteurs (comme les politiques publiques, spécialisations ou structures économiques) jouent un rôle majeur dans les variations du JTS. Le développement économique n’est donc pas directement un prédicteur fort du JTS.
+
+```{r}
+# Scatter plot avec courbe quadratique
+ggplot(JTS_SP_IV_GDPpc, aes(x = wdi_gdppc, y = JTS)) +
+  geom_point(alpha = 0.6) +
+  stat_smooth(method = "lm", formula = y ~ poly(x, 2), color = "red") +
+  labs(
+    title = "Relation quadratique entre GDP per capita et JTS",
+    x = "GDP per capita (USD)",
+    y = "Just Transition Score (JTS)"
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+# Générer le scatter plot avec courbe quadratique
+scatter_plot <- ggplot(JTS_SP_IV_GDPpc, aes(x = wdi_gdppc, y = JTS)) +
+  geom_point(alpha = 0.6) +
+  stat_smooth(method = "lm", formula = y ~ poly(x, 2), color = "red") +
+  labs(
+    title = "",
+    x = "PIB par habitant (dollars)",
+    y = "Just Transition Score (JTS)"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA)
+  )
+
+# Afficher le graphique
+print(scatter_plot)
+```
+
+```{r}
+# Sauvegarder le graphique avec un fond blanc
+ggsave(
+  filename = "/Users/alexm/Documents/Recherches_scientifiques/These/Papiers/Papiers/chap_JUMI2023/scatter_plot.png",
+  plot = scatter_plot,
+  width = 8,
+  height = 6,
+  bg = "white"
+)
+```
+
+```{r}
+# Générer le scatter plot avec courbe quadratique et distinction des groupes de revenus
+scatter_plot <- ggplot(JTS_SP_IV_GDPpc, aes(x = wdi_gdppc, y = JTS, color = as.factor(income_group_num))) +
+  geom_point(alpha = 0.6) +  # Points colorés par groupe de revenu
+  stat_smooth(method = "lm", formula = y ~ poly(x, 2), color = "red") +  # Courbe quadratique globale
+  labs(
+    title = "",
+    x = "PIB par habitant (dollars constants 2015)",
+    y = "Just Transition Score (JTS)",
+    color = "Groupe de revenu"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    legend.position = "right"
+  ) +
+  scale_color_manual(
+    values = c("1" = "red", "2" = "green", "3" = "blue", "4" = "purple"),
+    labels = c(
+      "1" = "Revenu élevé",
+      "2" = "Revenu intermédiaire supérieur",
+      "3" = "Revenu intermédiaire inférieur",
+      "4" = "Faible revenu"
+    )
+  )
+
+# Afficher le graphique
+print(scatter_plot)
+
+# Sauvegarder le graphique avec un fond blanc
+ggsave(
+  filename = "/Users/alexm/Documents/Recherches_scientifiques/These/Papiers/Papiers/chap_JUMI2023/scatter_plot.png",
+  plot = scatter_plot,
+  width = 8,
+  height = 6,
+  bg = "white"
+)
+
+```
+
+***Analyse de la relation non linéaire : Testez si la relation entre le JTS et le GDP per capita suit une forme non linéaire (par exemple, en forme de courbe en U inversé). Si le terme quadratique est significatif, cela confirme une relation non linéaire. Une courbe en U inversé suggérerait que les pays à PIB modéré maximisent leur JTS : Les pays riches (haut PIB) sont freinés par des impacts environnementaux élevés / Les pays pauvres (bas PIB) manquent de progrès sociaux suffisants.***
+
+## Groupes de revenu et dynamique des emplois verts
+
+On stratifie notre analyse en groupes de revenu pour identifier les priorités potentielle. Divisez les pays en groupes selon leur GDP per capita (quartiles ou catégories arbitraires). Puis comparez les scores JTS moyens entre groupes de revenu. Les groupes riches devraient avoir des scores JTS plus bas à cause de leurs impacts environnementaux. Les groupes modérés (middle income) pourraient maximiser leurs scores grâce à des progrès sociaux élevés et des impacts environnementaux contrôlés.
+
+```{r}
+# Stratification par groupe de revenu et visualisation
+ggplot(JTS_SP_IV_GDPpc, aes(x = wdi_gdppc, y = JTS, color = as.factor(income_group_num))) +
+  geom_point(alpha = 0.6) +
+  stat_smooth(method = "lm", formula = y ~ poly(x, 2), se = FALSE) +
+  labs(
+    title = "Relation entre GDP per capita et JTS par groupe de revenu",
+    x = "GDP per capita (USD)",
+    y = "Just Transition Score (JTS)",
+    color = "Income Group"
+  ) +
+  theme_minimal()
+
+```
+
+**High income (1) :** Groupe le plus hétérogène en GDPpc commençant légèrement en dessous de 15000 USD et s'étend jusqu'à plus de 90000 USD. Malgré une position en haut de l'échelle économique, les scores JTS sont très volatils, allant de valeurs très faibles (en dessous de 25) à des scores élevés (au delà de 75). Certains scores sont ridiculement bas, probablement dus à une empreinte environnementale extrêmement élevée dans certains pays riches (dépendance ou consommation issues d'industries fossiles par ex). Une légère décroissance ou stabilisation du JTS est visible pour les pays avec des GDP per capita très élevés (\>60 000 USD).
+
+Upper middle income (2) : Les scores JTS varient entre 30 et plus de 75 sans tendance claire. La fluctuation peut refléter des différences dans les politiques publiques, les investissements sociaux, et les structures économiques au sein de ce groupe.
+
+Lower middle income : Les performances JTS des Upper middle income ne se distinguent pas nettement de celles des Lower middle income, confirmant une continuité dans les scores. Les scores varient également entre **30 et 75**, montrant une **forte variabilité interne**. Certains pays parviennent à des scores élevés malgré un GDP per capita limité, probablement en raison d’une empreinte environnementale modérée et de progrès sociaux croissants.
+
+Low income (3) : Ce groupe montre une volatilité des JTS similaire à celle des High income, avec des scores très hétérogènes. Les scores élevés (\>70) dans ce groupe sont souvent attribués à une empreinte environnementale très faible, compensant des progrès sociaux limités. Les scores bas (\<30) indiquent des pays confrontés à des défis structurels majeurs.
+
+La forte volatilité dans le groupe High income souligne le défi de concilier des progrès sociaux élevés avec des impacts environnementaux croissants. Les pays à faible revenu (Low income) pourraient bénéficier d’un soutien ciblé pour améliorer leurs progrès sociaux sans augmenter excessivement leur empreinte environnementale. L’absence de différence nette dans les scores JTS entre Upper middle et Lower middle income suggère que ces deux groupes pourraient être regroupés ou analysés ensemble pour étudier leurs performances. Les scores très bas dans les groupes High income et Low income indiquent des cas extrêmes qui méritent une analyse qualitative pour comprendre leurs contextes spécifiques.
+
+```{r}
+# Identifie les pays avec GDP faible et JTS élevé
+outliers <- JTS_SP_IV_GDPpc %>%
+  filter(wdi_gdppc < 10000 & JTS > 70) %>%
+  select(iso3c, year, wdi_gdppc, JTS)
+
+# Afficher les valeurs aberrantes
+print(outliers)
+
+```
+
+## Analyse des valeurs aberrantes dans chaque groupe de revenu
+
+On va identifier les valeurs aberrantes en utilisant l'approche des IQR (interquartile range). Une observation est considérée comme aberrante si son score JTS est : inférieur à Q1-1.5 x IQR ou supérieur à Q3+1.5 x IQR.
+
+```{r}
+# Identifie les valeurs aberrantes par groupe de revenu
+outliers <- JTS_SP_IV_GDPpc %>%
+  group_by(income_group_num) %>%
+  summarise(
+    Q1 = quantile(JTS, 0.25, na.rm = TRUE),
+    Q3 = quantile(JTS, 0.75, na.rm = TRUE),
+    IQR = Q3 - Q1,
+    Lower_Bound = Q1 - 1.5 * IQR,
+    Upper_Bound = Q3 + 1.5 * IQR
+  ) %>%
+  right_join(JTS_SP_IV_GDPpc, by = "income_group_num") %>%
+  filter(JTS < Lower_Bound | JTS > Upper_Bound) %>%
+  select(iso3c, year, income_group_num, JTS, Lower_Bound, Upper_Bound)
+
+# Afficher les pays avec des valeurs aberrantes
+print(outliers)
+
+```
+
+```{r}
+# Boxplot avec valeurs aberrantes annotées
+boxplot_with_outliers <- ggplot(JTS_SP_IV_GDPpc, aes(x = as.factor(income_group_num), y = JTS, fill = as.factor(income_group_num))) +
+  geom_boxplot(outlier.shape = NA) + # Désactiver les points de valeurs aberrantes par défaut
+  geom_jitter(data = outliers, aes(label = iso3c), color = "red", size = 2) + # Marquer les outliers
+  labs(
+    title = "",
+    x = "Groupe de revenu",
+    y = "Just Transition Score (JTS)",
+    fill = "Income Group"
+  ) +
+  scale_fill_manual(
+    values = c("1" = "red", "2" = "green", "3" = "blue", "4" = "purple"),
+    labels = c(
+      "1" = "High income",
+      "2" = "Upper middle income",
+      "3" = "Lower middle income",
+      "4" = "Low income"
+    )
+  ) +
+  theme_minimal()
+
+
+print(boxplot_with_outliers)
+
+```
+
+```{r}
+# Graine aléatoire pour la reproductibilité
+set.seed(123) # Vous pouvez choisir n'importe quel nombre entier
+
+# Boxplot avec valeurs aberrantes annotées
+boxplot_with_outliers <- ggplot(JTS_SP_IV_GDPpc, aes(x = as.factor(income_group_num), y = JTS, fill = as.factor(income_group_num))) +
+  geom_boxplot(outlier.shape = NA) + # Désactiver les points de valeurs aberrantes par défaut
+  geom_jitter(data = outliers, aes(label = iso3c), color = "red", size = 2) + 
+  labs(
+    title = "",
+    x = "Groupe de revenu",
+    y = "Just Transition Score (JTS)",
+    fill = "Groupe de revenu"
+  ) +
+  scale_fill_manual(
+    values = c("1" = "red", "2" = "green", "3" = "blue", "4" = "purple"),
+    labels = c(
+      "1" = "Revenu élevé",
+      "2" = "Revenu intermédiaire supérieur",
+      "3" = "Revenu intermédiaire inférieur",
+      "4" = "Faible revenu"
+    )
+  ) +
+  theme_minimal()
+
+# Afficher le graphique
+print(boxplot_with_outliers)
+
+```
+
+```{r}
+# Sauvegarder le graphique avec un fond blanc
+ggsave(
+  filename = "/Users/alexm/Documents/Recherches_scientifiques/These/Papiers/Papiers/chap_JUMI2023/boxplot_with_outliers.png",
+  plot = boxplot_with_outliers,
+  width = 8,
+  height = 6,
+  bg = "white"
+)
+```
+
+```{r}
+# Générer le graphique avec ggplot2
+plot <- ggplot(JTS_SP_IV_GDPpc, aes(x = as.factor(income_group_num), y = JTS, fill = as.factor(income_group_num))) +
+  geom_boxplot(outlier.shape = NA) +
+  labs(
+    title = "Valeurs aberrantes des scores JTS par groupe de revenu",
+    x = "Groupe de revenu",
+    y = "Just Transition Score (JTS)",
+    fill = "Income Group"
+  ) +
+  theme_minimal()
+
+print(plot)
+
+# Extraire les limites IQR calculées par ggplot2
+boxplot_data <- ggplot_build(plot)$data[[1]]
+
+# Ajouter les limites dans le dataset pour identifier les outliers
+JTS_SP_IV_GDPpc_with_limits <- JTS_SP_IV_GDPpc %>%
+  mutate(
+    Lower_Bound = boxplot_data$ymin[match(as.factor(income_group_num), boxplot_data$group)],
+    Upper_Bound = boxplot_data$ymax[match(as.factor(income_group_num), boxplot_data$group)]
+  )
+
+# Identifier les outliers en utilisant les mêmes limites que ggplot2
+outliers <- JTS_SP_IV_GDPpc_with_limits %>%
+  filter(JTS < Lower_Bound | JTS > Upper_Bound) %>%
+  select(iso3c, year, income_group_num, JTS, Lower_Bound, Upper_Bound)
+print(outliers)
+```
+
+```{r}
+# Regénérer le graphique avec les mêmes outliers
+ggplot(JTS_SP_IV_GDPpc, aes(x = as.factor(income_group_num), y = JTS, fill = as.factor(income_group_num))) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(data = outliers, aes(label = iso3c), color = "red", size = 2) +
+  labs(
+    title = "Valeurs aberrantes des scores JTS par groupe de revenu",
+    x = "Groupe de revenu",
+    y = "Just Transition Score (JTS)",
+    fill = "Income Group"
+  ) +
+  theme_minimal()
+
+
+```
+
+Le graphique montre des valeurs aberrantes (points rouges) sous les boxplots pour chaque groupe de revenu : Ces valeurs correspondent aux scores **JTS anormalement bas** par rapport à la distribution générale de chaque groupe. Les valeurs aberrantes sont visibles dans tous les groupes, mais leur fréquence et leur distribution diffèrent.
+
+La classification High income (1) a une fréquence élevée de valeurs aberrantes. Ces résultats pourraient être liés à une empreinte environnementale disproportionnée dans certains pays riches (pays pétroliers ou industrialisés). La présence fréquente de valeurs aberrantes indique que certains pays riches peinent à concilier progrès sociaux et impacts environnementaux. Ces cas doivent être analysés en détail pour identifier les politiques spécifiques ou les industries responsables.
+
+La classification Upper middle income (2) et Lower middle income (3) ont des valeurs aberrantes modérées. Les pays de ces groupes semblent plus homogène dans leurs scores JTS, mais des exceptions apparaissent, en raisons de variations dans l'empreinte environnementale ou dans les progrès sociaux. Ce peut être des pays en transition rapide avec un impact environnemental important, ou des infrastructures limitées mais impacts environnementaux modérés.
+
+La classification low income présente une forte volatilité. Les valeurs aberrantes pourraient refléter des pays avec de faibles progrès sociaux, combiné potentiellement avec de grosses empreintes environnementales. Les valeurs aberrantes dans ce groupe montrent des défis structurels importants.
+
+```{r}
+# Liste unique des pays aberrants (iso3c, nom du pays et income_group)
+outliers_unique <- outliers %>%
+  group_by(iso3c) %>%
+  summarise(
+    country = firsti(iso3c),       # Nom du pays
+    income_group = first(income_group_num), # Classification income_group
+    num_outlier_years = n()       # Nombre d'années comme outlier
+  ) %>%
+  ungroup()
+
+```
+
+| **Code ISO-3** | **Pays**             | Groupe de revenu | Nombre d'années |
+|:---------------|:---------------------|:-----------------|-----------------|
+| ARE            | United Arab Emirates | 1                | 10              |
+| BHR            | Bahrain              | 1                | 2               |
+| GUY            | Guyana               | 1                | 12              |
+| KWT            | Kuwait               | 1                | 11              |
+| OMN            | Oman                 | 1                | 4               |
+| QAT            | Qatar                | 1                | 12              |
+| SAU            | Saudi Arabia         | 1                | 12              |
+| SGP            | Singapor             | 1                | 11              |
+| CHN            | China                | 2                | 5               |
+| GNQ            | Equatorial Guinea    | 2                | 8               |
+| LBY            | Libya                | 2                | 12              |
+| MDV            | Maldives             | 2                | 9               |
+| TKM            | Turkmenistan         | 2                | 12              |
+| DJI            | Djibouti             | 3                | 8               |
+| MRT            | Mauritania           | 3                | 3               |
+| SWZ            | Eswatini             | 3                | 1               |
+| AFG            | Afghanistan          | 4                | 3               |
+| SOM            | Somalia              | 4                | 11              |
+
+## Identifier des politiques publiques selon les groupes
+
+Pour les pays à bas revenus avec des SPI faibles, la priorité pourrait être de créer des emplois verts dans des secteurs simples, comme l’agriculture durable ou les énergies renouvelables hors réseau pour commencer (rejoint beaucoup de littérature pour également compenser l'augmentation de la population). Pour les revenus intermédiaires un accent sur la diversification avec des pays qui pourraient investir dans la transition verte pour développer des industries propres (éolien, solaire, gestion des déchets). Les pays riches devraient se concentrer sur des politiques de réduction drastique des impacts environnementaux comme taxe carbone, subventions à l'innovation verte et également une transition mais adaptée pour limiter les coûts.
+
+==\> Il faut décomposer le JTS pour comprendre les principales lacunes spécifiques à chaque pays.
+
+## Analyse temporelle
+
+Si votre base de données couvre plusieurs années, examinez l’évolution du JTS et du GDP per capita pour chaque pays.
+
+```{r}
+# Calcule de la moyenne annuelle de JTS par groupe de revenu
+JTS_trend <- JTS_SP_IV_GDPpc %>%
+  group_by(year, income_group_num) %>%
+  summarise(
+    Avg_JTS = mean(JTS, na.rm = TRUE),
+    SD_JTS = sd(JTS, na.rm = TRUE),
+    N = n()
+  ) %>%
+  mutate(SE_JTS = SD_JTS / sqrt(N)) %>%  # Calcul de l'erreur standard
+  ungroup()
+
+# Vérifie le résumé des données
+print(head(JTS_trend))
+
+```
+
+### Evolution du JTS au fil du temps pour chaque groupe de revenu
+
+```{r}
+# Visualisation des tendances par groupe de revenu
+ggplot(JTS_trend, aes(x = year, y = Avg_JTS, color = as.factor(income_group_num))) +
+  geom_line(size = 1) +  # Courbes des moyennes
+  geom_ribbon(aes(ymin = Avg_JTS - SE_JTS, ymax = Avg_JTS + SE_JTS, fill = as.factor(income_group_num)), alpha = 0.2) +  # IC
+  labs(
+    title = "Évolution temporelle du Just Transition Score (JTS)",
+    x = "Année",
+    y = "Moyenne du JTS",
+    color = "Groupe de revenu",
+    fill = "Groupe de revenu"
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+# Régressions linéaires par groupe de revenu
+trends <- JTS_SP_IV_GDPpc %>%
+  group_by(income_group_num) %>%
+  summarise(
+    Trend_Model = list(lm(JTS ~ year, data = cur_data())),
+    R_squared = summary(lm(JTS ~ year, data = cur_data()))$r.squared
+  )
+
+# Résultats des modèles
+print(trends$Trend_Model)
+
+```
+
+Résumé des coefficients :
+
+| **Groupe de revenu**        | **Intercept** | **Pente (année)** | **Interprétation**                               |
+|---------------|---------------|---------------|----------------------------|
+| **High income (1)**         | -1153.7255    | **0.6057**        | Augmentation modérée du JTS (\~0.61 points/an).  |
+| **Upper middle income (2)** | -757.5422     | **0.4105**        | Augmentation faible du JTS (\~0.41 points/an).   |
+| **Lower middle income (3)** | -1156.9205    | **0.6073**        | Augmentation similaire aux pays riches (\~0.61). |
+| **Low income (4)**          | -1852.6075    | **0.9487**        | Progression la plus rapide (\~0.95 points/an).   |
+
+High income (1) et lower middle income (3) : Ces deux groupes ont des pentes similaires (**0.6057** et **0.6073**), indiquant une progression modérée du JTS au fil des années. Les pays riches maintiennent un rythme constant d’amélioration, probablement grâce à des politiques progressives mais coûteuses. Les pays à revenu intermédiaire inférieur progressent également rapidement, ce qui peut refléter leur transition économique et environnementale en cours.
+
+Upper middle income : Une pente plus faible (**0.4105**) indique que ce groupe progresse plus lentement. Ce groupe est peut-être coincé dans une phase de développement industriel, avec des impacts environnementaux élevés limitant leur progression sociale.
+
+Low income : Le groupe à faible revenu a la pente la plus élevée (**0.9487**), indiquant une progression rapide. Ces pays partent souvent de scores JTS très faibles, et de petits gains dans les progrès sociaux ou la réduction de l’empreinte environnementale se traduisent par des augmentations significatives du JTS.
+
+Les progrès les plus rapides : Le groupe **Low income (4)** est en tête, montrant que des efforts significatifs sont faits pour améliorer leur transition juste, probablement grâce à des investissements externes ou des politiques internationales.
+
+Les progrès les plus lents : Le groupe **Upper middle income (2)** montre la progression la plus lente, ce qui suggère qu’il pourrait être le plus vulnérable dans le processus de transition juste.
+
+```{r}
+# Crée un dataframe des pentes
+coefficients_df <- data.frame(
+  income_group = c("High income", "Upper middle income", "Lower middle income", "Low income"),
+  slope = c(0.6057, 0.4105, 0.6073, 0.9487)
+)
+
+# Visualisation des pentes
+ggplot(coefficients_df, aes(x = income_group, y = slope, fill = income_group)) +
+  geom_bar(stat = "identity", width = 0.7) +
+  labs(
+    title = "Comparaison des pentes de régression linéaire",
+    x = "Groupe de revenu",
+    y = "Pente (progression annuelle moyenne du JTS)"
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+# Ajuste le modèle ANCOVA avec interaction
+ancova_model <- lm(JTS ~ year * as.factor(income_group_num), data = JTS_SP_IV_GDPpc)
+
+# Résumé du modèle ANCOVA
+summary(ancova_model)
+
+```
+
+L'objectif était de tester si les pentes de régression entre `JTS` et `year` diffèrent significativement selon les groupes de revenu (`income_group_num`).
+
+| **Terme**                             | **Estimate** | **Signification**                                                                                 |
+|---------------|---------------|------------------------------------------|
+| **(Intercept)**                       | -1153.725    | Point de départ pour `income_group_num = 1` (High income) extrapolé.                              |
+| **year**                              | 0.6057       | Pente pour le groupe de référence (`income_group_num = 1` - High income).                         |
+| **as.factor(income_group_num)2**      | 396.2        | Moyenne de `JTS` pour le groupe 2 (Upper middle income) par rapport au groupe 1.                  |
+| **as.factor(income_group_num)3**      | -3.195       | Moyenne de `JTS` pour le groupe 3 (Lower middle income) par rapport au groupe 1.                  |
+| **as.factor(income_group_num)4**      | -698.9       | Moyenne de `JTS` pour le groupe 4 (Low income) par rapport au groupe 1.                           |
+| **year:as.factor(income_group_num)2** | -0.1952      | La pente pour le groupe 2 est **légèrement plus faible** que pour le groupe 1 (non significatif). |
+| **year:as.factor(income_group_num)3** | 0.0016       | La pente pour le groupe 3 est **quasiment identique** à celle du groupe 1 (non significatif).     |
+| **year:as.factor(income_group_num)4** | 0.3430       | La pente pour le groupe 4 est **plus élevée** que celle du groupe 1, mais non significative.      |
+
+La pente pour le groupe de référence (High income, income_group_num =1) est 0.6057, ce qui signifie une augmentation modérée du JTS par an. Les pentes pour les autres groupes de revenu (Upper middle income, Lower middle income, Low income) ne diffèrent pas significativement de celle des pays High income. Cela signifie que, bien que les pentes soient légèrement différentes, les écarts ne sont pas assez importants pour être statistiquement significatif. Le modèle explique seulement 7,2% de la variabilité du JTS. Cela suggère que d'autres facteurs non inclus dans le modèle influencent également les variation temporelles du JTS. La valeur de p (\< 2.2e-16) pour le test global indique que le modèle est significatif dans son ensemble, mais cela est principalement dû à l'effet principal de l'année et non aux interactions.
+
+```{r}
+# Obtenir les coefficients du modèle avec interaction
+coef(summary(ancova_model))
+
+```
+
+### Tendances de JTS entre les groupes de revenu
+
+### Identification de changements significatifs ou divergences dans les trajectoires de TJ
+
+# Discussions
+
+### Suites
+
+Identifier les types de politiques qui augmentent le JTS dans chaque groupe de revenu. Étudier les pays à haut JTS mais bas PIB pour comprendre les stratégies à faibles coûts économiques. Nous aimerions également vérifier si une relation existe entre le développement des emplois verts et le JTS, modérée par le PIB. Impose la question du découplage : avoir un fort ou faible PIB n'exclut pas d'avoir un JTS élevé.
+
+### Verdissement des éco à partir du JTS
+
+# Proposition de plan d'article
+
+## Introduction
+
+--\> La transition écologique mondiale exige un alignement entre progrès environnementaux, sociaux et économiques. Les Suds, particulièrement vulnérables aux crises climatiques et socio-économiques, sont au cœur de cette transition.
+
+--\> Les emplois verts offrent une opportunité de développement durable, mais leur mise en œuvre et leur impact restent inégalement répartis. La transition juste est un concept essentiel mais complexe à opérationnaliser, surtout dans les pays du Sud.
+
+---\> Objectifs :
+
+1- Identifier les défis liés aux emplois verts et à la transition juste dans les Suds.
+
+2- Tester le Just Transition Score (JTS) pour mieux comprendre les trajectoires des pays et les relier aux politiques publiques.
+
+3- Proposer des pistes pour articuler emplois verts et transition juste selon les contextes.
+
+==\> Importance de connecter la quantification de la transition juste avec les besoins spécifiques des Suds, tout en prenant en compte les limites des indicateurs existants.
+
+## 1. Défis contextuels des Suds dans les emplois verts et la transition juste
+
+### 1.1. Les emplois verts: un levier essentiel
+
+Rappel des définitino et potentiel des emplois verts : réponse aux crises environnementales et sociales, et éco ?
+
+Rappel des obstacles et défis spécifiques dans les pays du Sud.
+
+### 1.2. La transition juste : un équilibre complexe
+
+Concept et principes : équilibrer progrès sociaux, réduction des impacts environnementaux, et soutenabilité économique.
+
+Défis dans les Suds.
+
+## 2. Quantifier la transition juste : le rôle et les limites des indicateurs
+
+### 2.1. Pourquoi mesurer la transition juste ?
+
+Mesurer les progrès sociaux et environnementaux pour guider les politiques publiques.
+
+Comprendre les trajectoires des pays pour identifier leurs besoins spécifiques pour guider les politiques publiques.
+
+--\> Plusieurs indicateurs : liste et enjeux de chaque.
+
+### 2.2. Cas d'étude : le Just Transition Score (JTS)
+
+Construction et utilité:
+
+-   Indicateur composite basé sur les empreintes carbone et matérielle, ajusté aux progrès sociaux (SPI).
+
+-   Outil permettant de comparer les trajectoires des pays dans la transition juste.
+
+Limites :
+
+-   Absence de dimension économique explicite (emplois verts, PIB).
+
+-   Difficulté à capturer les spécificités des pays et leurs stratégies différenciées.
+
+## 3. Analyses exploratoires à partir du JTS
+
+==\> Que révèle le JTS sur les différences entre pays et groupes, et comment cela éclaire-t-il les politiques d’emplois verts ?
+
+### 3.1. Méthodologie
+
+Données et variables : JTS, PIB, groupes de revenues
+
+Méthodes : analyse des relations entre JTS et PIB pour évaluer les dynamiques économiques sous-jacentes + comparaison entre groupes de revenus pour identifier les trajectoires spécifiques.
+
+### 3.2. Résultats exploratoires
+
+-   ***Relations entre JTS et PIB habitant*** :
+
+    -   Relation partielle en "U inversé" : meilleures performances pour les pays à PIB modéré, ils optimiseraient mieux leur transition.
+
+    -   Scores faibles dans les pays pauvres (progrès sociaux insuffisants) et riches (impacts environnementaux élevés).
+
+-   ***Différences entre groupes de revenus :***
+
+    -   Pays pauvres : progression rapide mais faible base de départ.
+
+    -   Pays intermédiaires : trajectoires divergentes avec des opportunités d’innovation.
+
+    -   Pays riches : stagnation due à des externalités environnementales.
+
+-   Outliers et trajectoires atypiques : analyse des pays aberrants, comme la Somalie (faible JTS et faible éco) ou le Qatar (faible JTS mais fort éco)
+
+-   On conclut sur les limites de ces analyses exploratoires, que la simple dimension éco explique pas tout, mais justement ...
+
+### 3.3. Implications pour les politiques d'emplois verts
+
+Ce que le JTS révèle sur les priorités :
+
+-   **Pays pauvres :** Stimuler des emplois verts accessibles (énergies hors réseau, gestion des déchets).
+
+-   **Pays intermédiaires :** Accélérer l’innovation verte pour diversifier les économies.
+
+-   **Pays riches :** Taxer les externalités et investir dans la transformation industrielle.
+
+<!-- -->
+
+-   Intégrer explicitement les emplois verts dans les indicateurs de transition juste :
+
+    -   Qualité et quantité des emplois dans les secteurs verts.
+
+    -   Contribution des politiques publiques à la création d’emplois verts.
+
+-   Développer des stratégies différenciées : Ciblage des secteurs prioritaires selon les contextes économiques (ex. : industries propres pour les pays intermédiaires).
+
+-   Perspectives pour les Suds : Importance de la coopération internationale pour financer les initiatives locales et combler les lacunes structurelles. Lier la création d’emplois verts aux priorités sociales et économiques, pour maximiser l’impact de la transition juste.
+
+## Discussion
+
+***Synthèse :***
+
+-   Les différences observées dans les trajectoires JTS révèlent :
+
+    -   Des défis structurels spécifiques selon les groupes de revenus.
+
+    -   La nécessité de politiques différenciées pour aligner progrès sociaux, environnementaux et économiques.
+
+-   Les limites actuelles du JTS soulignent le besoin d’intégrer explicitement les dimensions économiques et d’emplois verts dans les analyses futures.
+
+***Implications pour les politiques publiques :*** Nécessité de compléter les indicateurs actuels pour inclure explicitement les dimensions économiques et d’emplois verts + importance de stratégies différenciées + nécessité d'une gouvernance mondiale pour financer les transitions locales.
+
+***Ouvertures :*** Développement de nouveaux indicateurs intégrant emplois verts et impacts économiques + etudes complémentaires pour comprendre les liens entre emplois verts, progrès sociaux et soutenabilité économique.
+
+==\> Comment Yanis montre qu'il faut localiser et sectorialiser les politiques publiques peut justifier le fait de proposer des catégorisations de politiques selon classifications économiques : le JTS n'a pas de dimension éco, mais les politiques publiques appellent des considérations éco.
+
+## On regarde moyenne des JTS par pays
+
+```{r}
+# Moyenne des JTS par pays
+mean_JTS_by_iso3c <- JTS_SP_IV_GDPpc %>%
+  group_by(iso3c, income_group_num) %>%
+  summarise(
+    Mean_JTS = mean(JTS, na.rm = TRUE), # Moyenne des JTS pour chaque pays
+    GDPpc_Mean = mean(wdi_gdppc, na.rm = TRUE), # Moyenne des PIB/habitant pour chaque pays
+    .groups = "drop"
+  )
+
+# Aperçu des moyennes par pays
+print(mean_JTS_by_iso3c)
+
+```
+
+```{r}
+# Modèle linéaire simple
+linear_model <- lm(Mean_JTS ~ GDPpc_Mean, data = mean_JTS_by_iso3c)
+
+# Résumé du modèle linéaire
+summary(linear_model)
+
+
+```
+
+```{r}
+# Modèle quadratique
+quadratic_model <- lm(Mean_JTS ~ GDPpc_Mean + I(GDPpc_Mean^2), data = mean_JTS_by_iso3c)
+
+# Résumé du modèle quadratique
+summary(quadratic_model)
+
+```
+
+```{r}
+# Générer le graphique
+ggplot(mean_JTS_by_iso3c, aes(x = GDPpc_Mean, y = Mean_JTS, color = as.factor(income_group_num))) +
+  geom_point(alpha = 0.7) +
+  stat_smooth(method = "lm", formula = y ~ poly(x, 2), color = "red") +
+  labs(
+    title = "Relation entre PIB par habitant moyen et JTS moyen par groupe de revenu",
+    x = "PIB par habitant moyen (dollars)",
+    y = "Moyenne du Just Transition Score (JTS)",
+    color = "Groupe de revenu"
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+# Calcul des seuils des valeurs aberrantes par groupe de revenu
+outlier_thresholds <- mean_JTS_by_iso3c %>%
+  group_by(income_group_num) %>%
+  summarise(
+    Q1 = quantile(Mean_JTS, 0.25, na.rm = TRUE),
+    Q3 = quantile(Mean_JTS, 0.75, na.rm = TRUE),
+    IQR = Q3 - Q1,
+    Lower_Bound = Q1 - 1.5 * IQR,
+    Upper_Bound = Q3 + 1.5 * IQR
+  )
+
+# Aperçu des seuils calculés
+print(outlier_thresholds)
+
+```
+
+```{r}
+# Identifier les outliers basés sur les moyennes
+outlier_summary <- mean_JTS_by_iso3c %>%
+  left_join(outlier_thresholds, by = "income_group_num") %>%
+  mutate(
+    Is_Outlier = ifelse(Mean_JTS < Lower_Bound | Mean_JTS > Upper_Bound, TRUE, FALSE)
+  ) %>%
+  filter(Is_Outlier)
+
+# Aperçu des pays outliers
+print(outlier_summary)
+
+```
+
+```{r}
+ggplot(mean_JTS_by_iso3c, aes(x = as.factor(income_group_num), y = Mean_JTS, fill = as.factor(income_group_num))) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(data = outlier_summary, aes(x = as.factor(income_group_num), y = Mean_JTS), color = "red", size = 2) +
+  labs(
+    title = "Valeurs aberrantes des moyennes JTS par groupe de revenu",
+    x = "Groupe de revenu",
+    y = "Moyenne du Just Transition Score (JTS)",
+    fill = "Groupe de revenu"
+  ) +
+  theme_minimal()
+
+```
+
+### Je veux voir évolution outliers
+
+```{r}
+# Filtrer les données pour les pays sélectionnés
+selected_outliers <- JTS_SP_IV_GDPpc %>%
+  filter(iso3c %in% c("BHR", "OMN", "MRT", "AFG", "CHN"))
+
+# Générer le scatter plot avec courbe quadratique et distinction des groupes de revenus
+scatter_plot_with_outliers <- ggplot(JTS_SP_IV_GDPpc, aes(x = wdi_gdppc, y = JTS, color = as.factor(income_group_num))) +
+  geom_point(alpha = 0.6) +  # Points colorés par groupe de revenu
+  stat_smooth(method = "lm", formula = y ~ poly(x, 2), color = "red") +  # Courbe quadratique globale
+  geom_point(data = selected_outliers, aes(x = wdi_gdppc, y = JTS), color = "black", size = 3, shape = 4) +  # Ajouter les points pour les outliers sélectionnés
+  geom_text(data = selected_outliers, aes(x = wdi_gdppc, y = JTS, label = iso3c), color = "black", vjust = -1) +  # Ajouter des étiquettes pour les outliers
+  labs(
+    title = "Évolution des outliers sélectionnés dans la relation PIB/JTS",
+    x = "PIB par habitant (dollars)",
+    y = "Just Transition Score (JTS)",
+    color = "Groupe de revenu"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    legend.position = "right"
+  ) +
+  scale_color_manual(
+    values = c("1" = "red", "2" = "green", "3" = "blue", "4" = "purple"),
+    labels = c(
+      "1" = "High income",
+      "2" = "Upper middle income",
+      "3" = "Lower middle income",
+      "4" = "Low income"
+    )
+  )
+
+# Afficher le graphique
+print(scatter_plot_with_outliers)
+
+
+```
+
+```{r}
+# Filtrer les données pour les outliers sélectionnés
+selected_outliers <- JTS_SP_IV_GDPpc %>%
+  filter(iso3c %in% c("BHR", "OMN", "MRT", "AFG", "CHN"))
+
+# Graphique d'évolution des scores JTS pour chaque pays
+line_plot <- ggplot(selected_outliers, aes(x = year, y = JTS, group = iso3c, color = iso3c)) +
+  geom_line(size = 1) +  # Tracer les lignes pour chaque pays
+  geom_point(size = 2) +  # Ajouter les points pour chaque année
+  labs(
+    title = "Évolution des scores JTS des pays sélectionnés",
+    x = "Année",
+    y = "Just Transition Score (JTS)",
+    color = "Pays (ISO3)"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    panel.grid = element_line(color = "grey90")
+  )
+
+# Afficher le graphique
+print(line_plot)
+
+```
+
+Une manière d’identifier l’amélioration des scores consiste à calculer des **pentes de régressions linéaires simples** pour chaque pays (JTS en fonction de l’année). Cela permet de quantifier la vitesse et la direction des changements.
+
+```{r}
+# Calcul des tendances d'évolution par pays
+trend_analysis <- selected_outliers %>%
+  group_by(iso3c) %>%
+  summarise(
+    slope = coef(lm(JTS ~ year))[2],  # Coefficient de la pente
+    intercept = coef(lm(JTS ~ year))[1],  # Intercept de la régression
+    p_value = summary(lm(JTS ~ year))$coefficients[2, 4],  # Significativité de la pente
+    change = max(JTS) - min(JTS)  # Variation totale sur la période
+  )
+
+# Afficher les résultats
+print(trend_analysis)
+
+```
+
+Pour détecter les moments d'amélioration, effectuez une **analyse des dérivées discrètes** ou identifiez des **changements abrupts** dans les scores.
+
+```{r}
+# Calcul des différences annuelles des scores JTS
+outlier_evolution <- selected_outliers %>%
+  arrange(iso3c, year) %>%
+  group_by(iso3c) %>%
+  mutate(
+    annual_change = JTS - lag(JTS),  # Différence entre années consécutives
+    significant_change = ifelse(abs(annual_change) > 5, "Yes", "No")  # Seuil de variation significative
+  )
+
+# Afficher les résultats
+print(outlier_evolution)
+
+```
+
+Ajoutez une annotation des **variations significatives** dans le graphique d’évolution :
+
+```{r}
+# Graphique avec annotations pour les variations significatives
+line_plot_with_changes <- ggplot(outlier_evolution, aes(x = year, y = JTS, group = iso3c, color = iso3c)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  geom_text(aes(label = ifelse(significant_change == "Yes", round(annual_change, 1), "")), vjust = -1) +
+  labs(
+    title = "Évolution des scores JTS avec variations significatives",
+    x = "Année",
+    y = "Just Transition Score (JTS)",
+    color = "Pays (ISO3)"
+  ) +
+  theme_minimal()
+
+# Afficher le graphique
+print(line_plot_with_changes)
+```
+
+```{r}
+# Préparer les données : ajouter des variations annuelles et identifier les inflexions
+evolution_data <- selected_outliers %>%
+  arrange(iso3c, year) %>%
+  group_by(iso3c) %>%
+  mutate(
+    year = as.integer(year),  # Convertir les années en entiers pour supprimer les décimales
+    annual_change = JTS - lag(JTS),  # Variation annuelle du score
+    significant_change = ifelse(abs(annual_change) > 5, "Inflexion", "Stable"),  # Seuil de variation significative
+    income_group_label = case_when(  # Ajouter des labels textuels pour les groupes de revenu
+      income_group_num == 1 ~ "Revenu élevé",
+      income_group_num == 2 ~ "Revenu intermédiaire supérieur",
+      income_group_num == 3 ~ "Revenu intermédiaire inférieur",
+      income_group_num == 4 ~ "Faible revenu"
+    ),
+    country_label = paste0(iso3c, " (", income_group_label, ")")  # Ajouter le nom du pays et groupe de revenu
+  ) %>%
+  filter(!is.na(significant_change))  # Supprimer les NA de "Type de changement"
+print(evolution_data)
+```
+
+```{r}
+# Préparer les données : ajouter des variations annuelles et identifier les inflexions
+evolution_data <- selected_outliers %>%
+  arrange(iso3c, year) %>%
+  group_by(iso3c) %>%
+  mutate(
+    year = as.integer(year),  # Convertir les années en entiers pour supprimer les décimales
+    annual_change = JTS - lag(JTS),  # Variation annuelle du score
+    significant_change = ifelse(abs(annual_change) > 5, "Inflexion", "Stable"),  # Seuil de variation significative
+    income_group_label = case_when(  # Ajouter des labels textuels pour les groupes de revenu
+      income_group_num == 1 ~ "Revenu élevé",
+      income_group_num == 2 ~ "Revenu intermédiaire supérieur",
+      income_group_num == 3 ~ "Revenu intermédiaire inférieur",
+      income_group_num == 4 ~ "Faible revenu"
+    ),
+    country_label = paste0(iso3c, " (", income_group_label, ")")  # Ajouter le nom du pays et groupe de revenu
+  ) %>%
+  filter(!is.na(significant_change))  # Supprimer les NA de "Type de changement"
+
+# Créer le graphique
+trend_plot <- ggplot(evolution_data, aes(x = year, y = JTS, group = iso3c, color = country_label)) +
+  geom_line(size = 1) +  # Lignes pour chaque pays
+  geom_point(aes(size = abs(annual_change), shape = significant_change), alpha = 0.7) +  # Points pour chaque année
+  scale_size_continuous(range = c(2, 6)) +  # Échelle de la taille des points
+  scale_shape_manual(
+    values = c("Inflexion" = 17, "Stable" = 16),  # Triangle pour inflexion, cercle pour stable
+    name = "Type de changement"
+  ) +
+  scale_x_continuous(
+    breaks = seq(2011, 2022, by = 1),  # Forcer les années entières comme graduations
+    labels = seq(2011, 2022, by = 1)   # Utiliser des années comme étiquettes
+  ) +
+  labs(
+    title = "",
+    x = "Année",
+    y = "Just Transition Score (JTS)",
+    color = "Pays (Groupe de revenu)",
+    size = "Amplitude du changement",
+    shape = "Type de changement"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    legend.text = element_text(size = 10),
+    panel.grid = element_line(color = "grey90"),
+    plot.title = element_text(size = 14, face = "bold")
+  )
+
+# Afficher le graphique
+print(trend_plot)
+
+# Sauvegarder le graphique
+ggsave(
+  filename = "/Users/alexm/Documents/Recherches_scientifiques/These/Papiers/Papiers/chap_JUMI2023/trend_plot_with_fixed_years.png",
+  plot = trend_plot,
+  width = 12,
+  height = 8,
+  bg = "white"
+)
+```
+
+```{r}
+# Préparer les données avec les annotations
+annotations <- data.frame(
+  iso3c = c("AFG", "BHR", "CHN", "MRT", "OMN"),
+  outlier_years = c(
+    "2011, 2012, 2013",
+    "2011, 2020",
+    "2012, 2013, 2014, 2015, 2016",
+    "2011, 2012, 2015",
+    "2012, 2015, 2016"
+  )
+)
+
+# Fusionner les annotations avec les données d'évolution
+evolution_data_with_annotations <- evolution_data %>%
+  left_join(annotations, by = "iso3c")
+
+# Créer le graphique
+trend_plot_with_outliers <- ggplot(evolution_data_with_annotations, aes(x = year, y = JTS, group = iso3c, color = country_label)) +
+  geom_line(size = 1) +  # Lignes pour chaque pays
+  geom_point(aes(size = abs(annual_change), shape = significant_change), alpha = 0.7) +  # Points pour chaque année
+  scale_size_continuous(range = c(2, 6)) +  # Échelle de la taille des points
+  scale_shape_manual(
+    values = c("Inflexion" = 17, "Stable" = 16),  # Triangle pour inflexion, cercle pour stable
+    name = "Type de changement"
+  ) +
+  scale_x_continuous(
+    breaks = seq(2011, 2022, by = 1),  # Années entières comme graduations
+    labels = seq(2011, 2022, by = 1)   # Utiliser des années comme étiquettes
+  ) +
+  labs(
+    title = "Évolution des scores JTS avec annotations d'outliers",
+    x = "Année",
+    y = "Just Transition Score (JTS)",
+    color = "Pays (Groupe de revenu)",
+    size = "Amplitude du changement",
+    shape = "Type de changement"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    legend.text = element_text(size = 10),
+    panel.grid = element_line(color = "grey90"),
+    plot.title = element_text(size = 14, face = "bold")
+  ) +
+  geom_text(
+    aes(
+      label = ifelse(!is.na(outlier_years), paste0("Outliers: ", outlier_years), ""),
+      vjust = -1
+    ),
+    check_overlap = TRUE,
+    size = 3,
+    hjust = 0.5
+  )
+
+# Afficher le graphique
+print(trend_plot_with_outliers)
+
+```
+
+```{r}
+install.packages("tibble")  # Si non installé
+library(tibble)  # Chargez le package
+
+```
+
+```{r}
+ls()  # Liste des objets dans l'environnement
+
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Créer un dataframe avec les seuils des outliers corrigés
+outlier_thresholds <- data.frame(
+  income_group_label = c("Revenu élevé", "Revenu intermédiaire supérieur", "Revenu intermédiaire inférieur", "Faible revenu"),
+  Lower_Bound = c(30.31, 43.88, 49.15, 40.31),  # Seuils inférieurs pour chaque groupe de revenu
+  color = c("purple", "blue", "green", "red")  # Couleurs associées aux groupes
+)
+
+# Générer une couleur unique pour chaque pays
+unique_countries <- unique(evolution_data$country_label)
+country_colors <- setNames(
+  grDevices::rainbow(length(unique_countries)),  # Palette de couleurs distinctes
+  unique_countries
+)
+
+# Combiner les couleurs des seuils et des pays
+threshold_colors <- setNames(outlier_thresholds$color, outlier_thresholds$income_group_label)
+combined_colors <- c(threshold_colors, country_colors)
+
+# Créer le graphique avec les seuils d'outliers et des couleurs uniques
+trend_plot <- ggplot(evolution_data, aes(x = year, y = JTS, group = iso3c, color = country_label)) +
+  geom_line(size = 1) +  # Lignes pour chaque pays
+  geom_point(aes(size = abs(annual_change), shape = significant_change), alpha = 0.7) +  # Points pour chaque année
+  scale_size_continuous(range = c(2, 6)) +  # Échelle de la taille des points
+  scale_shape_manual(
+    values = c("Inflexion" = 17, "Stable" = 16),  # Triangle pour inflexion, cercle pour stable
+    name = "Type de changement"
+  ) +
+  geom_hline(
+    data = outlier_thresholds,
+    aes(yintercept = Lower_Bound, color = income_group_label),  # Utilise les seuils et leurs couleurs
+    linetype = "dashed",
+    size = 0.8,
+    inherit.aes = FALSE  seu# Prevent conflicts with main aes mappings
+  ) +
+  scale_x_continuous(
+    breaks = seq(2011, 2022, by = 1),  # Forcer les années entières comme graduations
+    labels = seq(2011, 2022, by = 1)   # Utiliser des années comme étiquettes
+  ) +
+  scale_color_manual(
+    values = combined_colors,  # Combinaison des couleurs des seuils et des pays
+    breaks = c(names(threshold_colors), names(country_colors)),  # Légendes pour seuils et pays
+    labels = c(names(threshold_colors), names(country_colors))   # Libellés pour seuils et pays
+  ) +
+  labs(
+    title = "",
+    x = "Année",
+    y = "Just Transition Score (JTS)",
+    color = "Pays (Groupe de revenu)\nSeuils (Couleurs par revenu)",
+    size = "Amplitude du changement",
+    shape = "Type de changement"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    legend.text = element_text(size = 10),
+    panel.grid = element_line(color = "grey90"),
+    plot.title = element_text(size = 14, face = "bold")
+  )
+
+# Afficher le graphique
+print(trend_plot)
+
+# Sauvegarder le graphique
+ggsave(
+  filename = "/Users/alexm/Documents/Recherches_scientifiques/These/Papiers/Papiers/chap_JUMI2023/trend_plot_with_unique_country_colors_fr.png",
+  plot = trend_plot,
+  width = 12,
+  height = 8,
+  bg = "white"
+)
+
+```

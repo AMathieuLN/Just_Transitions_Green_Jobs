@@ -1,0 +1,3 @@
+"0","# Vérifier que les pays ERI et VEN ont été supprimés"
+"0","JTS_SP_IV_GDPpc %>%"
+"0","  filter(iso3c %in% c(""ERI"", ""VEN""))"

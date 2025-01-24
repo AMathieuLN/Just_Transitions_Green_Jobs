@@ -1,0 +1,6 @@
+"0","# On extrait les colonnes nécessaires de ECO_RDS"
+"0","ECO_clean <- ECO_RDS %>%"
+"0","  select(iso3c, year, wdi_gdppc)"
+"0",""
+"0","# Vérifie les premières lignes"
+"0","head(ECO_clean)"

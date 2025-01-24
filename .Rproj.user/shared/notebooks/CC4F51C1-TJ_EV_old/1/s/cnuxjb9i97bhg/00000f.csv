@@ -1,0 +1,6 @@
+"0","# Vérifie les NA dans wdi_gdpc"
+"0","sum(is.na(JTS_SP_IV_GDPpc$wdi_gdppc))"
+"1","[1]"
+"1"," 26"
+"1","
+"

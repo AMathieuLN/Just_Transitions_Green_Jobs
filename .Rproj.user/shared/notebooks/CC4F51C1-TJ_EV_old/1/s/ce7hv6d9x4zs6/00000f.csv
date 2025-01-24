@@ -1,0 +1,8 @@
+"0","# Sauvegarder le graphique avec un fond blanc"
+"0","ggsave("
+"0","  filename = ""/Users/alexm/Documents/Recherches_scientifiques/These/Papiers/Papiers/chap_JUMI2023/boxplot_with_outliers.png"","
+"0","  plot = boxplot_with_outliers,"
+"0","  width = 8,"
+"0","  height = 6,"
+"0","  bg = ""white"""
+"0",")"

@@ -1,0 +1,5 @@
+"0","# Vérifie qu'il n'y a pas de doublons dans le dataframe final"
+"0","JTS_SP_IV_GDPpc %>%"
+"0","  group_by(iso3c, year) %>%"
+"0","  summarise(Count = n(), .groups = ""drop"") %>%"
+"0","  filter(Count > 1)"

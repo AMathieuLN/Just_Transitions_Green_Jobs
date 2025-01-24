@@ -1,0 +1,5 @@
+"0","# On va extraire ici les lignes contenant des valeurs manquantes"
+"0","missing_rows <- JTS_SP_IV[!complete.cases(JTS_SP_IV), ]"
+"0",""
+"0","# affiche les premières lignes avec des valeurs manquantes"
+"0","head(missing_rows)"
