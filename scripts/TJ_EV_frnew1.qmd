@@ -6,8 +6,6 @@ title: "TJ_EV_fr"
 
 ### Sources et données d'origine
 
-
-
 ### Package et library
 
 ```{r}
@@ -15,18 +13,37 @@ options(repos = c(CRAN = "https://cloud.r-project.org"))
 ```
 
 ```{r}
-source("requirements.R")
+# Installer et charger le package httr
+if (!requireNamespace("httr", quietly = TRUE)) {
+  install.packages("httr")
+}
+library(httr)
+```
+
+```{r}
+# Définition du chemin GitHub
+base_url <- "https://raw.githubusercontent.com/AMathieuLN/Just_Transitions_Green_Jobs/main/"
+```
+
+```{r}
+# Chargement du fichier requirements.R depuis le repository
+file_path_requirements <- paste0(base_url, "requirements.R")
+temp_requirements <- tempfile(fileext = ".R")
+GET(file_path_requirements, write_disk(temp_requirements, overwrite = TRUE))
+source(temp_requirements)
 ```
 
 ```{r}
 # Chargement du fichier RDS
-file_path1 <- "data/JTS_SP.xlsx"
-# Lecture du fichier RDS
-JTS_SP <- read_excel(file_path1)
+file_path1 <- paste0(base_url, "data/JTS_SP.xlsx")
+temp_excel <- tempfile(fileext = ".xlsx")
+GET(file_path1, write_disk(temp_excel, overwrite = TRUE))
+JTS_SP <- read_excel(temp_excel)
 # Chargement du fichier RDS
-file_path2 <- "data/IV.rds"
-# Lecture du fichier RDS
-IV <- readRDS(file_path2)
+file_path2 <- paste0(base_url, "data/IV.rds")
+temp_rds <- tempfile(fileext = ".rds")
+GET(file_path2, write_disk(temp_rds, overwrite = TRUE))
+IV <- readRDS(temp_rds)
 ```
 
 ### Correction des erreurs
@@ -126,22 +143,16 @@ table(JTS_SP_IV$income_group, JTS_SP_IV$income_group_num)
 sum(is.na(JTS_SP_IV))
 ```
 
-#### Téléchargement de "JTS_SP_IV"
-
-```{r}
-# Sauvegarde du fichier fusionné au format RDS, dans le dossier "data/"
-saveRDS(JTS_SP_IV, file = "data/JTS_SP_IV.rds", compress = "xz")
-```
-
 ### Fusion avec données de PIB/habitants
 
 Les données utilisées dans cette étude ont été initialement téléchargées via le package R fourni par la Banque Mondiale, ce qui garantit leur authenticité et leur conformité aux standards internationaux. Dans le cadre de cette étude spécifique, le PIB/habitant (intitulé ici "wdi_gdppc"), nous avons extrait uniquement la variable pertinente de ce jeu de données consolidé, afin de répondre aux objectifs de recherche ciblés.
 
 ```{r}
 # Chargement du fichier RDS
-file_path3 <- "data/WDI_GDPPC.xlsx"
-# Lecture du fichier RDS
-WDI_GDPPC <- read_excel(file_path3)
+file_path3 <- paste0(base_url, "data/WDI_GDPPC.rds")
+temp_rds <- tempfile(fileext = ".rds")
+GET(file_path3, write_disk(temp_rds, overwrite = TRUE))
+WDI_GDPPC <- readRDS(temp_rds)
 ```
 
 ```{r}
@@ -289,11 +300,113 @@ model_quad <- lm(JTS ~ wdi_gdppc + I(wdi_gdppc^2), data = JTS_SP_IV_GDPpc)
 summary(model_quad)
 ```
 
+Le modèle quadratique utilisé dans cette analyse explore la relation non linéaire entre le JTS et le PIB/habitant. Il s'appuie sur une régression polynomiale de degré 2, exprimée par l'équation suivante :
+
+$JTS = a⋅(PIB)^2+b⋅PIB+c$
+
+Où :
+
+-   a est le coefficient du terme quadratique (PIB\^2), représentant la courbure de la relation.
+
+-   b est le coefficient du terme linéaire (PIB), capturant la tendance générale.
+
+-   c est l'ordonnée à l'origine, représentant le score JTS lorsque le PIB par habitant est nul.
+
+Pour indiquer le niveau de PIB/habitant où la relation entre le JTS et le PIB change de nature, nous calculons le point de retournement. Ce point représente dans l'analyse le seuil au-delà duquel une augmentation supplémentaire du PIB/habitant est associé à une diminution des performances JTS.
+
+Le point de retournement de la courbe correspond au niveau de PIB/habitant pour lequel le JTS atteint un maximum (dans le cas d'une courbe en U inversé). Ce point est calculé en annulant la dérivée première de l'équation par rapport au PIB :
+
+$d(JTS)/d(PIB) = 2a*PIB+b$
+
+En posant cette dérivée égale à zéro, nous obtenons la valeur du PIB/habitant au point de retournement :
+
+$PIBretournement = -b/2a$
+
+```{r}
+# Extraction des coefficients du modèle quadratique
+coefficients_quad <- coef(model_quad)
+```
+
+```{r}
+# Calcul du point de retournement (PIB par habitant)
+# Point de retournement = -b / (2 * a), où a = coefficient de wdi_gdppc^2, et b = coefficient de wdi_gdppc
+a <- coefficients_quad["I(wdi_gdppc^2)"]
+b <- coefficients_quad["wdi_gdppc"]
+turning_point <- -b / (2 * a)
+
+# Afficher le point de retournement
+cat("Le point de retournement (PIB par habitant) est :", turning_point, "\n")
+```
+```{r}
+summary(model_quad)
+```
+
+Méthode Delta pour obtenir une estimation de l'incertitude (erreur standard) du point de retournement. Cette erreur permet de calculer un intervalle de confiance pour le point de retournement.
+
+```{r}
+# Calcul de la variance du point de retournement (méthode Delta)
+vcov_quad <- vcov(model_quad)         # Matrice de variance-covariance
+
+# Var(turning_point) = (-1 / (2 * a))^2 * Var(b) + (b / (2 * a^2))^2 * Var(a) - 2 * (-1 / (2 * a)) * (b / (2 * a^2)) * Cov(a, b)
+var_turning_point <- ((-1 / (2 * a))^2 * vcov_quad["wdi_gdppc", "wdi_gdppc"]) +
+                     ((b / (2 * a^2))^2 * vcov_quad["I(wdi_gdppc^2)", "I(wdi_gdppc^2)"]) -
+                     (2 * (-1 / (2 * a)) * (b / (2 * a^2)) * vcov_quad["wdi_gdppc", "I(wdi_gdppc^2)"])
+
+# Calcul de l'erreur standard
+se_turning_point <- sqrt(var_turning_point)
+
+# Intervalle de confiance (95%)
+ci_lower <- turning_point - 1.96 * se_turning_point
+ci_upper <- turning_point + 1.96 * se_turning_point
+
+# Afficher les résultats
+cat("Intervalle de confiance (95%) :", ci_lower, "-", ci_upper, "\n")
+```
+
+```{r}
+plot(model_quad)  # Graphiques de diagnostic standard
+
+```
+
+Une fois le point de retournement calculé à partir du modèle quadratique, il est pertinent d’examiner les pays ou observations dont le PIB par habitant est proche de ce seuil. Cette étape permet de contextualiser les résultats et d’illustrer concrètement la relation entre le **Just Transition Score (JTS)** et le **PIB par habitant**.
+
+Pour identifier ces observations, une **tolérance** est définie autour du point de retournement. Cette tolérance, fixée ici à 10 % de la valeur du PIB par habitant au point de retournement, permet de sélectionner les observations dont le PIB est suffisamment proche pour être considéré comme représentatif de cette dynamique. En termes mathématiques, les observations satisfont la condition suivante :
+
+$∣PIBobservé​−PIBretournement​∣≤tolérance$
+
+Où :
+
+-   PIBretournement est la valeur calculée à partir des coefficients du modèle quadratique ;
+
+-   PIBobservé représente les valeurs de PIB/habitant dans le jeu de données ;
+
+-   tolérance est définie comme une fraction (10% ici) de la valeur du PIBretournement.
+
+L'identification des observations proches du point de retournement contribue à :
+
+-   Valider empiriquement le modèle : En montrant que le point de retournement correspond à des cas concrets et plausibles dans les données.
+
+-   Illustrer la diversité des trajectoires : Ces observations mettent en lumière des contextes socio-économiques variés et permettent de mieux comprendre les défis spécifiques rencontrés par les pays proches de ce seuil.
+
+```{r}
+# Identifier les observations proches du point de retournement
+# Tolérance définie autour du point de retournement
+tolerance <- 0.1 * turning_point  # 10 % de tolérance
+
+# Filtrer les données proches du point de retournement
+observations_close <- JTS_SP_IV_GDPpc %>%
+  filter(abs(wdi_gdppc - turning_point) <= tolerance)
+
+# Afficher les observations proches
+cat("Les observations proches du point de retournement sont :\n")
+print(observations_close)
+```
+
 #### Figure 1 "Nuage de points avec courbe quadratique"
 
 ```{r}
 # Nuage de points avec courbe quadratique et distinction des groupes de revenus
-scatter_plot <- ggplot(JTS_SP_IV_GDPpc, aes(x = wdi_gdppc, y = JTS, color = as.factor(income_group_num))) +
+scatter_plot_fr <- ggplot(JTS_SP_IV_GDPpc, aes(x = wdi_gdppc, y = JTS, color = as.factor(income_group_num))) +
   geom_point(alpha = 0.6) +  # Points colorés par groupe de revenu
   stat_smooth(method = "lm", formula = y ~ poly(x, 2), color = "red") +  # Courbe quadratique globale
   labs(
@@ -319,17 +432,6 @@ scatter_plot <- ggplot(JTS_SP_IV_GDPpc, aes(x = wdi_gdppc, y = JTS, color = as.f
   )
 # Afficher le graphique
 print(scatter_plot_fr)
-```
-
-```{r}
-# Sauvegarde du graphique avec un fond blanc
-ggsave(
-  filename = "outputs/scatter_plot.png", 
-  plot = scatter_plot,
-  width = 8,
-  height = 6,
-  bg = "white"
-)
 ```
 
 ### 2. Valeurs aberrantes
